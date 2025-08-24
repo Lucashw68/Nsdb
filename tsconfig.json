@@ -1,0 +1,11 @@
+{
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "#nsdb/*": ["./*"]
+    }
+  },
+  "include": ["./stores", "./types", "./scripts"]
+
+}

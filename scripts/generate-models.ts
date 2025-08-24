@@ -1,0 +1,65 @@
+import { Project } from 'ts-morph'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const typesPath = path.resolve(__dirname, '../types/database.types.ts')
+const outputPath = path.resolve(__dirname, '../stores/entities/models.ts')
+
+const project = new Project({
+	tsConfigFilePath: path.resolve(__dirname, '../tsconfig.json'),
+	skipAddingFilesFromTsConfig: true
+})
+
+const sourceFile = project.addSourceFileAtPath(typesPath)
+
+const dbType = sourceFile.getTypeAliasOrThrow('Database')
+const publicType = dbType.getType().getProperty('public')?.getTypeAtLocation(dbType)
+const tablesType = publicType?.getProperty('Tables')?.getTypeAtLocation(dbType)
+
+if (!tablesType) {
+	console.error('❌ Impossible de trouver Database["public"]["Tables"]')
+	process.exit(1)
+}
+
+const tableNames = tablesType.getProperties().map(p => p.getName())
+
+// Génération de ModelTypes
+const modelTypes =
+	`import type { Tables } from '@/types/database.types'\n\n` +
+	'export interface ModelTypes {\n' +
+	tableNames.map(name => `  ${name}: Tables<'${name}'>`).join('\n') +
+	'\n}\n\n'
+
+// Génération des imports de stores
+const imports =
+	tableNames
+		.map(name => {
+			const composableName = `use${capitalize(singular(name))}Store`
+			return `import { ${composableName} } from './use${capitalize(singular(name))}Store'`
+		})
+		.join('\n') + '\n\n'
+
+// Génération de modelMap
+const modelMap =
+	'export const modelMap = {\n' +
+	tableNames
+		.map(name => `  ${name}: ${`use${capitalize(singular(name))}Store`}`)
+		.join(',\n') +
+	'\n} as const\n'
+
+fs.writeFileSync(outputPath, imports + modelTypes + modelMap)
+console.log(`✅ Fichier models.ts généré avec ${tableNames.length} tables.`)
+
+// Helpers
+function capitalize(str: string): string {
+	return str.charAt(0).toUpperCase() + str.slice(1)
+}
+
+function singular(str: string): string {
+	// Cas simple : retire le 's' de fin si présent
+	return str.endsWith('s') ? str.slice(0, -1) : str
+}
