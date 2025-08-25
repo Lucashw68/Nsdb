@@ -1,9 +1,21 @@
 {
 	"name": "@lucashw68/nsdb",
-	"version": "0.1.0",
-	"description": "Nuxt Supabase DB Layer",
-	  "publishConfig": {
-    	"registry": "https://npm.pkg.github.com/"
+	"version": "0.1.1",
+  	"description": "A Nuxt 3 + Supabase + Pinia integration layer for unified DB access and offline storage.",
+	"keywords": [
+		"nuxt",
+		"supabase",
+		"pinia",
+		"store",
+		"module",
+		"database",
+		"layer"
+	],
+	"engines": {
+    	"node": ">=22.14.0"
+  	},
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com/"
 	},
 	"repository": {
 		"type": "git",
@@ -23,7 +35,7 @@
 		"nuxt": "^4.0.1",
 		"pinia": "^2.1.4"
 	},
-  	"scripts": {
+	"scripts": {
 		"generate:types": "npx supabase gen types typescript --project-id <id> > types/database.types.ts",
 		"generate:models": "tsx scripts/generate-models.ts",
 		"generate:stores": "tsx scripts/generate-stores.ts",
@@ -34,5 +46,6 @@
 		"module.ts",
 		"runtime",
 		"scripts"
-  	]
+	],
+	"packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
