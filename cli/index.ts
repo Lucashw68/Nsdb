@@ -1,18 +1,21 @@
 #!/usr/bin/env tsx
 
-const command = process.argv[2]
+import { execSync } from 'node:child_process'
 
-switch (command) {
-  case 'generate:types':
-    await import('../scripts/generate-types.ts')
-    break
-  case 'generate:models':
-    await import('../scripts/generate-models.ts')
-    break
-  case 'generate:stores':
-    await import('../scripts/generate-stores.ts')
-    break
-  default:
-    console.log('❌ Unknown command')
-    process.exit(1)
+const args = process.argv.slice(2)
+
+const commands = {
+  'generate:types': 'tsx scripts/generate-types.ts',
+  'generate:models': 'tsx scripts/generate-models.ts',
+  'generate:stores': 'tsx scripts/generate-stores.ts',
+  'generate:all': 'npm run generate:all',
 }
+
+const command = commands[args[0]]
+
+if (!command) {
+  console.error(`❌ Command not found: ${args[0]}`)
+  process.exit(1)
+}
+
+execSync(command, { stdio: 'inherit', shell: true })

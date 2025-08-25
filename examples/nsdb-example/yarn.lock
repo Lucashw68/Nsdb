@@ -693,10 +693,10 @@
   resolved "https://registry.yarnpkg.com/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz#8ace5259254426ccef57f3175bc64ed7095ed919"
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
-"@lucashw68/nsdb@^0.1.1":
-  version "0.1.1"
-  resolved "https://npm.pkg.github.com/download/@lucashw68/nsdb/0.1.1/83c807a5a98687ebd0bc9a0f47492f4e54cd6765#83c807a5a98687ebd0bc9a0f47492f4e54cd6765"
-  integrity sha512-XWDNQrjoWg5jIYfvGvKAIKxiPyflh90LK7gv1JNV6e1J02ufsMHYnWYvf6SH6Q1vwDtydXsVUT7bgF6iHCjCWQ==
+"@lucashw68/nsdb@^0.1.8":
+  version "0.1.8"
+  resolved "https://npm.pkg.github.com/download/@lucashw68/nsdb/0.1.8/5df3cc5e9b1a059391470c1141a88af210c22847#5df3cc5e9b1a059391470c1141a88af210c22847"
+  integrity sha512-qEodSktSdaBXPZnfp8M3QImjAtmltcua5UJTE1TlY/69Szgj1GI7xFbtxTQULRLau6CiAIui/iTUIaTN2FL1RA==
   dependencies:
     ts-morph "^20.0.0"
 
