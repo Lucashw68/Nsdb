@@ -40,7 +40,6 @@
 		"generate:models": "tsx scripts/generate-models.ts",
 		"generate:stores": "tsx scripts/generate-stores.ts",
 		"generate:all": "npm run generate:types && npm run generate:models && npm run generate:stores",
-		"publish": "npm publish"
 	},
 	"files": [
 		"module.ts",
