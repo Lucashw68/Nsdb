@@ -2,5 +2,16 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['@nuxt/fonts', '@nuxt/icon', '@nuxt/image']
+  modules: [
+    '@nuxt/fonts',
+    '@nuxt/icon',
+    '@nuxt/image',
+    '@lucashw68/nsdb'
+  ],
+  runtimeConfig: {
+		public: {
+			supabaseUrl: process.env.SUPABASE_URL,
+			supabaseKey: process.env.SUPABASE_KEY
+		}
+	},
 })

@@ -6,6 +6,5 @@
       "#nsdb/*": ["./*"]
     }
   },
-  "include": ["./stores", "./types", "./scripts"]
-
+  "include": ["stores/**/*.ts", "types/**/*.ts", "scripts/**/*.ts"]
 }
