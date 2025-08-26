@@ -16,9 +16,16 @@ if (existsSync(envPath)) {
 }
 
 const projectId = process.env.SUPABASE_PROJECT_ID
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_KEY
 
 if (!projectId) {
 	console.error('❌ SUPABASE_PROJECT_ID is not defined in .env (or environment)')
+	process.exit(1)
+}
+
+if (!supabaseUrl || !supabaseKey) {
+	console.error('❌ SUPABASE_URL and SUPABASE_KEY must be defined in .env (or environment)')
 	process.exit(1)
 }
 
@@ -30,6 +37,6 @@ try {
 	execSync(command, { stdio: 'inherit', shell: true })
 	console.log(`✅ Types générés avec succès dans : ${outputPath}`)
 } catch (err) {
-	console.error('❌ Échec de la génération des types Supabase.')
+	console.error('❌ Échec de la génération des types Supabase.', err)
 	process.exit(1)
 }
