@@ -35,7 +35,8 @@
 	},
 	"peerDependencies": {
 		"nuxt": "^4.0.1",
-		"pinia": "^2.1.4"
+		"pinia": "^2.1.4",
+		"supabase": "^2.39.2"
 	},
 	"bin": {
 		"nsdb": "./cli/index.js"
