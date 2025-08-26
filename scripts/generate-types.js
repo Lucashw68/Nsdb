@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process'
 import path from 'path'
 import * as dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync } from 'fs'
 
 // Récupère le répertoire courant (du projet utilisateur)
 const cwd = process.cwd()
@@ -29,8 +29,16 @@ if (!supabaseUrl || !supabaseKey) {
 	process.exit(1)
 }
 
-const outputPath = path.resolve(cwd, 'types/database.types.ts')
-const command = `npx supabase gen types typescript --project-id ${projectId} > ${outputPath}`
+// Prépare le chemin de sortie
+const typesDir = path.resolve(cwd, 'types')
+const outputPath = path.join(typesDir, 'database.types.ts')
+
+// Crée le dossier types/ s'il n'existe pas
+if (!existsSync(typesDir)) {
+	mkdirSync(typesDir, { recursive: true })
+}
+
+const command = `npx supabase gen types typescript --project-id ${projectId} > "${outputPath}"`
 
 try {
 	console.log('🔄 Génération des types Supabase...')
