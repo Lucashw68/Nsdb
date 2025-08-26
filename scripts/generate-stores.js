@@ -3,25 +3,23 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { Project } from 'ts-morph'
+import { Project, SyntaxKind } from 'ts-morph'
 
 // Résolution depuis le projet utilisateur
 const cwd = process.cwd()
 const modelsPath = path.resolve(cwd, 'stores/entities/models.ts')
 const outputDir = path.resolve(cwd, 'stores/entities')
+const tsconfigPath = path.resolve(cwd, 'tsconfig.json')
 
 if (!fs.existsSync(modelsPath)) {
 	console.error(`❌ Fichier introuvable : ${modelsPath}`)
 	process.exit(1)
 }
-
-const tsconfigPath = path.resolve(cwd, 'tsconfig.json')
 if (!fs.existsSync(tsconfigPath)) {
 	console.error(`❌ tsconfig.json introuvable à la racine du projet.`)
 	process.exit(1)
 }
 
-// Initialisation de ts-morph
 const project = new Project({
 	tsConfigFilePath: tsconfigPath,
 	skipAddingFilesFromTsConfig: true
@@ -29,13 +27,39 @@ const project = new Project({
 
 const sourceFile = project.addSourceFileAtPath(modelsPath)
 
-const modelMapVar = sourceFile.getVariableDeclarationOrThrow('modelMap')
-const modelMap = modelMapVar.getInitializerIfKindOrThrow(expr => expr.isObjectLiteralExpression())
+let modelMapVar
+try {
+	modelMapVar = sourceFile.getVariableDeclarationOrThrow('modelMap')
+} catch (err) {
+	console.error('❌ Variable "modelMap" introuvable dans models.ts')
+	process.exit(1)
+}
 
-const entries = modelMap.getProperties().map(prop => {
+const initializer = modelMapVar.getInitializer()
+
+if (!initializer || !initializer.isAsExpression?.()) {
+	console.error('❌ modelMap doit être un objet, avec ou sans "as const"')
+	process.exit(1)
+}
+
+const objectLiteral = initializer.getExpression()
+
+if (!objectLiteral || !objectLiteral.isObjectLiteralExpression()) {
+	console.error('❌ modelMap n\'est pas un objet littéral valide')
+	process.exit(1)
+}
+
+const entries = objectLiteral.getProperties().map(prop => {
+	if (!prop.isPropertyAssignment()) return null
+
 	const name = prop.getName().replace(/['"]/g, '')
 	return { name }
-})
+}).filter(Boolean)
+
+if (entries.length === 0) {
+	console.error('❌ Aucun élément trouvé dans modelMap')
+	process.exit(1)
+}
 
 entries.forEach(({ name }) => {
 	const composableName = `use${capitalize(name)}Store`

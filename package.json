@@ -43,9 +43,10 @@
 	},
 	"scripts": {
 		"generate:types": "npx supabase gen types typescript --project-id <id> > types/database.types.ts",
-		"generate:models": "tsx scripts/generate-models.ts",
-		"generate:stores": "tsx scripts/generate-stores.ts",
-		"generate:all": "npm run generate:types && npm run generate:models && npm run generate:stores"
+		"generate:models": "node scripts/generate-models.ts",
+		"generate:stores": "node scripts/generate-stores.ts",
+		"generate:all": "npm run generate:types && npm run generate:models && npm run generate:stores",
+		"clear": "node scripts/clear.js"
 	},
 	"files": [
 		"module.ts",

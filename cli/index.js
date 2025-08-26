@@ -4,6 +4,7 @@ const { execSync } = require('node:child_process')
 const path = require('path')
 
 const commands = {
+	'clear': path.resolve(__dirname, '../scripts/clear.js'),
 	'generate:types': path.resolve(__dirname, '../scripts/generate-types.js'),
 	'generate:models': path.resolve(__dirname, '../scripts/generate-models.js'),
 	'generate:stores': path.resolve(__dirname, '../scripts/generate-stores.js'),

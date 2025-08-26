@@ -693,10 +693,10 @@
   resolved "https://registry.yarnpkg.com/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz#8ace5259254426ccef57f3175bc64ed7095ed919"
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
-"@lucashw68/nsdb@^0.1.17":
-  version "0.1.17"
-  resolved "https://npm.pkg.github.com/download/@lucashw68/nsdb/0.1.17/ef3ec34ac180d7d69bd4f3fc2b70a86cfb7e756f#ef3ec34ac180d7d69bd4f3fc2b70a86cfb7e756f"
-  integrity sha512-VwN7J2GVB8T1Jgh322+Zk128rHcBlKKPkrdPEkHDzxsuoI8HsR3fAqzdzd/gX4EQD5B9aEGIoJSQ4pCDXu33PA==
+"@lucashw68/nsdb@^0.1.18":
+  version "0.1.18"
+  resolved "https://npm.pkg.github.com/download/@lucashw68/nsdb/0.1.18/f074014a91f8a00d5960e2195c3d9936705b1161#f074014a91f8a00d5960e2195c3d9936705b1161"
+  integrity sha512-o1X/FD+zFQ07DtiqARz4IUKL9hNTcpQCrLxUx3QfeGm0MD92R9jhkxBnAR/ESO9jw3ZTjyecBNW280wKqrdkPg==
   dependencies:
     "@supabase/supabase-js" "^2.56.0"
     ts-morph "^20.0.0"

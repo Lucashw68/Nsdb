@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-import { Project } from 'ts-morph'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { Project } from 'ts-morph'
 
-// Utilise le répertoire du projet utilisateur
 const cwd = process.cwd()
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -30,7 +29,14 @@ const project = new Project({
 
 const sourceFile = project.addSourceFileAtPath(typesPath)
 
-const dbType = sourceFile.getTypeAliasOrThrow('Database')
+let dbType
+try {
+	dbType = sourceFile.getTypeAliasOrThrow('Database')
+} catch (err) {
+	console.error(`❌ Type alias "Database" introuvable dans ${typesPath}`)
+	process.exit(1)
+}
+
 const publicType = dbType.getType().getProperty('public')?.getTypeAtLocation(dbType)
 const tablesType = publicType?.getProperty('Tables')?.getTypeAtLocation(dbType)
 
@@ -41,14 +47,7 @@ if (!tablesType) {
 
 const tableNames = tablesType.getProperties().map(p => p.getName())
 
-// Génération de ModelTypes
-const modelTypes =
-	`import type { Tables } from '@/types/database.types'\n\n` +
-	'export interface ModelTypes {\n' +
-	tableNames.map(name => `  ${name}: Tables<'${name}'>`).join('\n') +
-	'\n}\n\n'
-
-// Génération des imports de stores
+// Génération des imports
 const imports =
 	tableNames
 		.map(name => {
@@ -57,7 +56,14 @@ const imports =
 		})
 		.join('\n') + '\n\n'
 
-// Génération de modelMap
+// Interface ModelTypes
+const modelTypes =
+	`import type { Tables } from '@/types/database.types'\n\n` +
+	'export interface ModelTypes {\n' +
+	tableNames.map(name => `  ${name}: Tables<'${name}'>`).join('\n') +
+	'\n}\n\n'
+
+// modelMap
 const modelMap =
 	'export const modelMap = {\n' +
 	tableNames
@@ -69,7 +75,6 @@ fs.mkdirSync(path.dirname(outputPath), { recursive: true })
 fs.writeFileSync(outputPath, imports + modelTypes + modelMap)
 
 console.log(`✅ Fichier models.ts généré avec ${tableNames.length} tables.`)
-
 
 // Helpers
 function capitalize(str) {
