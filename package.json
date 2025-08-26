@@ -1,6 +1,6 @@
 {
 	"name": "@lucashw68/nsdb",
-	"version": "0.1.17",
+	"version": "0.1.18",
 	"description": "A Nuxt 3 + Supabase + Pinia integration layer for unified DB access and offline storage.",
 	"keywords": [
 		"nuxt",
