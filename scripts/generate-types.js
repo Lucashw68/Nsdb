@@ -29,6 +29,13 @@ if (!supabaseUrl || !supabaseKey) {
 	process.exit(1)
 }
 
+try {
+	execSync('npx supabase --version', { stdio: 'ignore' })
+} catch {
+	console.error('❌ Le CLI Supabase n\'est pas installé. Veuillez exécuter : npm install -D supabase')
+	process.exit(1)
+}
+
 // Prépare le chemin de sortie
 const typesDir = path.resolve(cwd, 'types')
 const outputPath = path.join(typesDir, 'database.types.ts')
