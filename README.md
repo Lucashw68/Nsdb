@@ -78,6 +78,23 @@ Un projet d’exemple est disponible dans :
 examples/test-app
 ```
 
+## Makefile
+
+### Commit, tag, push and publish (with default commit message)
+```bash
+make deploy
+```
+
+### Custom commit message
+```bash
+make deploy MESSAGE="add example app"
+```
+
+### Bump minor version instead of patch
+```bash
+make deploy VERSION_TYPE=minor MESSAGE="new features"
+```
+
 ## 📄 Licence
 
 MIT License

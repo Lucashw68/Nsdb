@@ -1,6 +1,6 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 
-import { execSync } from 'node:child_process'
+const { execSync } = require('node:child_process')
 
 const args = process.argv.slice(2)
 
@@ -8,7 +8,7 @@ const commands = {
   'generate:types': 'tsx scripts/generate-types.ts',
   'generate:models': 'tsx scripts/generate-models.ts',
   'generate:stores': 'tsx scripts/generate-stores.ts',
-  'generate:all': 'npm run generate:all',
+  'generate:all': 'npm run generate:all'
 }
 
 const command = commands[args[0]]
