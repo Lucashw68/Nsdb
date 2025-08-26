@@ -1,49 +1,59 @@
+#!/usr/bin/env node
+
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { Project } from 'ts-morph'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+// Résolution depuis le projet utilisateur
+const cwd = process.cwd()
+const modelsPath = path.resolve(cwd, 'stores/entities/models.ts')
+const outputDir = path.resolve(cwd, 'stores/entities')
 
-const modelsPath = path.resolve(__dirname, '../stores/entities/models.ts')
-const outputDir = path.resolve(__dirname, '../stores/entities')
+if (!fs.existsSync(modelsPath)) {
+	console.error(`❌ Fichier introuvable : ${modelsPath}`)
+	process.exit(1)
+}
 
+const tsconfigPath = path.resolve(cwd, 'tsconfig.json')
+if (!fs.existsSync(tsconfigPath)) {
+	console.error(`❌ tsconfig.json introuvable à la racine du projet.`)
+	process.exit(1)
+}
+
+// Initialisation de ts-morph
 const project = new Project({
-	tsConfigFilePath: path.resolve(__dirname, '../tsconfig.json'),
+	tsConfigFilePath: tsconfigPath,
 	skipAddingFilesFromTsConfig: true
 })
 
 const sourceFile = project.addSourceFileAtPath(modelsPath)
 
 const modelMapVar = sourceFile.getVariableDeclarationOrThrow('modelMap')
-const modelMap = modelMapVar.getInitializerIfKindOrThrow(
-	tsm => tsm.isObjectLiteralExpression()
-)
+const modelMap = modelMapVar.getInitializerIfKindOrThrow(expr => expr.isObjectLiteralExpression())
 
 const entries = modelMap.getProperties().map(prop => {
 	const name = prop.getName().replace(/['"]/g, '')
-	const storeName = prop.getInitializerOrThrow().getText().replace(/['"]/g, '')
-	return { name, storeName }
+	return { name }
 })
 
-entries.forEach(({ name, storeName }) => {
+entries.forEach(({ name }) => {
 	const composableName = `use${capitalize(name)}Store`
 	const fileName = `${composableName}.ts`
 	const filePath = path.resolve(outputDir, fileName)
 
-	// Ne pas écraser un store existant
 	if (fs.existsSync(filePath)) {
 		console.log(`⚠️  ${fileName} existe déjà, ignoré.`)
 		return
 	}
 
+	const typeName = capitalize(name)
 	const content = `import { createDbStore } from '@/stores/createDbStore'
 import type { Tables } from '@/types/database.types'
 
-type ${capitalize(name)} = Tables<'${name}'>
+type ${typeName} = Tables<'${name}'>
 
-const baseStore = createDbStore<${capitalize(name)}>('${name}', {
+const baseStore = createDbStore<${typeName}>('${name}', {
 	key: 'id',
 	orderBy: 'updated_at',
 	defaultSort: 'desc',
@@ -59,6 +69,6 @@ export const ${composableName} = defineStore('${name}', () => {
 	console.log(`✅ ${fileName} généré.`)
 })
 
-function capitalize(str: string): string {
+function capitalize(str) {
 	return str.charAt(0).toUpperCase() + str.slice(1)
 }

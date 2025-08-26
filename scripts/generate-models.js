@@ -1,16 +1,30 @@
+#!/usr/bin/env node
+
 import { Project } from 'ts-morph'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+// Utilise le répertoire du projet utilisateur
+const cwd = process.cwd()
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const typesPath = path.resolve(__dirname, '../types/database.types.ts')
-const outputPath = path.resolve(__dirname, '../stores/entities/models.ts')
+const typesPath = path.resolve(cwd, 'types/database.types.ts')
+const outputPath = path.resolve(cwd, 'stores/entities/models.ts')
+const tsconfigPath = path.resolve(cwd, 'tsconfig.json')
+
+if (!fs.existsSync(typesPath)) {
+	console.error(`❌ Fichier introuvable : ${typesPath}`)
+	process.exit(1)
+}
+if (!fs.existsSync(tsconfigPath)) {
+	console.error(`❌ tsconfig.json introuvable à la racine du projet.`)
+	process.exit(1)
+}
 
 const project = new Project({
-	tsConfigFilePath: path.resolve(__dirname, '../tsconfig.json'),
+	tsConfigFilePath: tsconfigPath,
 	skipAddingFilesFromTsConfig: true
 })
 
@@ -51,15 +65,17 @@ const modelMap =
 		.join(',\n') +
 	'\n} as const\n'
 
+fs.mkdirSync(path.dirname(outputPath), { recursive: true })
 fs.writeFileSync(outputPath, imports + modelTypes + modelMap)
+
 console.log(`✅ Fichier models.ts généré avec ${tableNames.length} tables.`)
 
+
 // Helpers
-function capitalize(str: string): string {
+function capitalize(str) {
 	return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
-function singular(str: string): string {
-	// Cas simple : retire le 's' de fin si présent
+function singular(str) {
 	return str.endsWith('s') ? str.slice(0, -1) : str
 }

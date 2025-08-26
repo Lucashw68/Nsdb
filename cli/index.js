@@ -5,9 +5,9 @@ const { execSync } = require('node:child_process')
 const args = process.argv.slice(2)
 
 const commands = {
-  'generate:types': 'tsx scripts/generate-types.ts',
-  'generate:models': 'tsx scripts/generate-models.ts',
-  'generate:stores': 'tsx scripts/generate-stores.ts',
+  'generate:types': 'node scripts/generate-types.js',
+  'generate:models': 'node scripts/generate-models.js',
+  'generate:stores': 'node scripts/generate-stores.js',
   'generate:all': 'npm run generate:all'
 }
 
