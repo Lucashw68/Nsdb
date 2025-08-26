@@ -3,9 +3,8 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { Project, SyntaxKind } from 'ts-morph'
+import { Project, SyntaxKind, Node } from 'ts-morph'
 
-// 📌 Résolution depuis le projet utilisateur
 const cwd = process.cwd()
 const modelsPath = path.resolve(cwd, 'stores/entities/models.ts')
 const outputDir = path.resolve(cwd, 'stores/entities')
@@ -21,7 +20,6 @@ if (!fs.existsSync(tsconfigPath)) {
 	process.exit(1)
 }
 
-// ✅ Initialisation de ts-morph
 const project = new Project({
 	tsConfigFilePath: tsconfigPath,
 	skipAddingFilesFromTsConfig: true
@@ -29,7 +27,6 @@ const project = new Project({
 
 const sourceFile = project.addSourceFileAtPath(modelsPath)
 
-// 🎯 Récupère l'initialiseur brut de modelMap
 const modelMapVar = sourceFile.getVariableDeclarationOrThrow('modelMap')
 const initializer = modelMapVar.getInitializer()
 
@@ -38,7 +35,6 @@ if (!initializer) {
 	process.exit(1)
 }
 
-// 🧠 Supporte modelMap = { ... } ou modelMap = { ... } as const
 let obj
 
 if (initializer.getKind() === SyntaxKind.AsExpression) {
@@ -47,8 +43,8 @@ if (initializer.getKind() === SyntaxKind.AsExpression) {
 	obj = initializer
 }
 
-if (!obj || !obj.isObjectLiteralExpression()) {
-	console.error('❌ modelMap doit être un objet, avec ou sans "as const"')
+if (!Node.isObjectLiteralExpression(obj)) {
+	console.error('❌ modelMap doit être un objet littéral, avec ou sans "as const".')
 	process.exit(1)
 }
 
@@ -89,7 +85,6 @@ export const ${composableName} = defineStore('${name}', () => {
 	console.log(`✅ ${fileName} généré.`)
 })
 
-// 🔤 Helpers
 function capitalize(str) {
 	return str.charAt(0).toUpperCase() + str.slice(1)
 }
