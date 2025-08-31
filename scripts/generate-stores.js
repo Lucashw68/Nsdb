@@ -64,8 +64,8 @@ entries.forEach(({ name }) => {
 	}
 
 	const typeName = capitalize(name)
-	const content = `import { createDbStore } from '@/stores/createDbStore'
-import type { Tables } from '@/types/database.types'
+	const content = `import { createDbStore } from '@lucashw68/nsdb/createDbStore''
+import type { Tables } from '../../types/database.types'
 
 type ${typeName} = Tables<'${name}'>
 

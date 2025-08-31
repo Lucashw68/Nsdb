@@ -22,7 +22,13 @@
 		"url": "https://github.com/Lucashw68/nsdb"
 	},
 	"exports": {
-		".": "./module.ts"
+		".": "./module.ts",
+		"./useEntitiesStore": "./runtime/stores/useEntitiesStore.ts",
+		"./useSupabaseApi": "./runtime/composables/useSupabaseApi.ts",
+  		"./useSupabaseApiStorage": "./runtime/composables/useSupabaseApiStorage.ts",
+		"./useSupabaseModels": "./runtime/composables/useSupabaseModels.ts",
+		"./createDbStore": "./runtime/stores/createDbStore.ts",
+  		"./createSingletonDbStore": "./runtime/stores/createSingletonDbStore.ts"
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.56.0",

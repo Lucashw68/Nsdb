@@ -11,9 +11,9 @@
 </template>
 
 <script setup lang="ts">
-import { usePlaylistStore } from '@/stores/entities/usePlaylistStore'
+import { usePlaylistsStore } from '@/stores/entities/usePlaylistsStore'
 
-const store = usePlaylistStore()
+const store = usePlaylistsStore()
 const { items: playlists, fetch } = store
 
 await fetch()
