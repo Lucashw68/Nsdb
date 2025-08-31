@@ -1,5 +1,4 @@
 import { skipHydrate, defineStore } from 'pinia'
-import { useSupabaseClient } from '#imports'
 
 export function createDbStore<T extends Record<string, any>>(resource: string, options: {
 	key?: keyof T

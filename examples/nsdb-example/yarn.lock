@@ -693,12 +693,14 @@
   resolved "https://registry.yarnpkg.com/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz#8ace5259254426ccef57f3175bc64ed7095ed919"
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
-"@lucashw68/nsdb@^0.1.22":
-  version "0.1.22"
-  resolved "https://npm.pkg.github.com/download/@lucashw68/nsdb/0.1.22/42a8c45d904b3b5bae4254ac1aba6d93ad283d9f#42a8c45d904b3b5bae4254ac1aba6d93ad283d9f"
-  integrity sha512-5Ri8NOe1Au3ElxmU43FLeJELSVIwc+RtF0Qv7jvf8oERrKQoWVA5sDv85Oi08lHQtaBF68w/DoqXc2XiGpVjIg==
+"@lucashw68/nsdb@^0.1.23":
+  version "0.1.23"
+  resolved "https://npm.pkg.github.com/download/@lucashw68/nsdb/0.1.23/676d8db1f3094967e3c4112ae1ce4757be9dcfd0#676d8db1f3094967e3c4112ae1ce4757be9dcfd0"
+  integrity sha512-Uyx+unuJyHKHXqRcw1Bz5hUw1HkfW9STJGNaYuAOJjwf6AO4sKPA8rNi2Vtng629riaKl/AJHbUU+H5G7DZe6w==
   dependencies:
+    "@nuxtjs/supabase" "1.6.1"
     "@supabase/supabase-js" "^2.56.0"
+    nuxt "^4.0.1"
     ts-morph "^20.0.0"
     tsx "^4.20.5"
 
@@ -1132,6 +1134,16 @@
     vite-node "^3.2.4"
     vite-plugin-checker "^0.10.2"
     vue-bundle-renderer "^2.1.2"
+
+"@nuxtjs/supabase@1.6.1":
+  version "1.6.1"
+  resolved "https://registry.yarnpkg.com/@nuxtjs/supabase/-/supabase-1.6.1.tgz#51019b6e61b6a1052371fd101987e65cf79290d7"
+  integrity sha512-E28CbtmdgljNp3Ue9TbIBYuEyY3Ldsyj9wF6UqkuaYNh2y6ruM/IkBQTV/SZoSAjYsJkObKKN9Gycwaf9lfOiQ==
+  dependencies:
+    "@supabase/ssr" "^0.7.0"
+    "@supabase/supabase-js" "^2.56.0"
+    defu "^6.1.4"
+    pathe "^2.0.3"
 
 "@oxc-minify/binding-android-arm64@0.80.0":
   version "0.80.0"
@@ -1738,6 +1750,13 @@
     "@types/phoenix" "^1.6.6"
     "@types/ws" "^8.18.1"
     ws "^8.18.2"
+
+"@supabase/ssr@^0.7.0":
+  version "0.7.0"
+  resolved "https://registry.yarnpkg.com/@supabase/ssr/-/ssr-0.7.0.tgz#5e7a476153f3628752f03844635ee0c4f0b23393"
+  integrity sha512-G65t5EhLSJ5c8hTCcXifSL9Q/ZRXvqgXeNo+d3P56f4U1IxwTqjB64UfmfixvmMcjuxnq2yGqEWVJqUcO+AzAg==
+  dependencies:
+    cookie "^1.0.2"
 
 "@supabase/storage-js@^2.10.4":
   version "2.11.0"
@@ -4737,7 +4756,7 @@ nth-check@^2.0.1:
   dependencies:
     boolbase "^1.0.0"
 
-nuxt@^4.0.3:
+nuxt@^4.0.1, nuxt@^4.0.3:
   version "4.0.3"
   resolved "https://registry.yarnpkg.com/nuxt/-/nuxt-4.0.3.tgz#bafa9da2a92daac83182983f7891275fa201a2a6"
   integrity sha512-skRFoxY/1nphk+viF5ZEDLNEMJse0J/U5+wAYtJfYQ86EcEpLMm9v78FwdCc5IioKpgmSda6ZlLxY1DgK+6SDw==
