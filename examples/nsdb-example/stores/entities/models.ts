@@ -1,6 +1,6 @@
 import { usePlaylistsStore } from './usePlaylistsStore'
 
-import type { Tables } from '@/types/database.types'
+import type { Tables } from '../../types/database.types'
 
 export interface ModelTypes {
   gears: Tables<'gears'>

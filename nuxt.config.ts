@@ -5,5 +5,7 @@ export default defineNuxtConfig({
 
 	build: {
 		transpile: ['ts-morph']
-	}
+	},
+
+	modules: ['@nuxtjs/supabase']
 })
