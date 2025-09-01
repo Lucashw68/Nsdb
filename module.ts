@@ -1,8 +1,7 @@
 import {
 	defineNuxtModule,
 	addImportsDir,
-	addPlugin,
-	createResolver,
+	createResolver
 } from '@nuxt/kit'
 
 export default defineNuxtModule({
@@ -28,8 +27,5 @@ export default defineNuxtModule({
 		if (options.withStores) {
 			addImportsDir(resolve(runtimeDir, 'stores'))
 		}
-
-		// Injection du plugin (Supabase, etc.)
-		addPlugin(resolve(runtimeDir, 'plugins/nsdb'))
 	}
 })
