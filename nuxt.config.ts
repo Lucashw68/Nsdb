@@ -7,5 +7,10 @@ export default defineNuxtConfig({
 		transpile: ['ts-morph']
 	},
 
-	modules: ['@nuxtjs/supabase']
+	imports: {
+		dirs: [
+			'composables/**',
+			'runtime/composables/**'
+		]
+	}
 })

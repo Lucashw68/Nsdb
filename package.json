@@ -31,7 +31,6 @@
 		"./createSingletonDbStore": "./runtime/stores/createSingletonDbStore.ts"
 	},
 	"dependencies": {
-		"@nuxtjs/supabase": "1.6.1",
 		"@supabase/supabase-js": "^2.56.0",
 		"nuxt": "^4.0.1",
 		"ts-morph": "^20.0.0",
@@ -44,6 +43,7 @@
 	"peerDependencies": {
 		"nuxt": "^4.0.1",
 		"pinia": "^2.1.4",
+		"@pinia-plugin-persistedstate/nuxt": "^1.2.1",
 		"supabase": "^2.39.2"
 	},
 	"bin": {

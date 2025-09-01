@@ -58,7 +58,7 @@ const imports =
 
 // Interface ModelTypes
 const modelTypes =
-	`import type { Tables } from '@/types/database.types'\n\n` +
+	`import type { Tables } from '~/types/database.types'\n\n` +
 	'export interface ModelTypes {\n' +
 	tableNames.map(name => `  ${name}: Tables<'${name}'>`).join('\n') +
 	'\n}\n\n'

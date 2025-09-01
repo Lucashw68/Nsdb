@@ -1,4 +1,9 @@
-import { defineNuxtModule, addImportsDir, addComponent, createResolver } from '@nuxt/kit'
+import {
+	defineNuxtModule,
+	addImportsDir,
+	addPlugin,
+	createResolver,
+} from '@nuxt/kit'
 
 export default defineNuxtModule({
 	meta: {
@@ -7,20 +12,24 @@ export default defineNuxtModule({
 	},
 
 	defaults: {
-		withStores: true
+		withStores: true,
 	},
 
 	setup(options, nuxt) {
 		const { resolve } = createResolver(import.meta.url)
+		const runtimeDir = resolve('./runtime')
 
-		// Auto-import all composables (from runtime/composables)
-		addImportsDir(resolve('./runtime/composables'))
+		// Alias interne (#nsdb → module)
+		nuxt.options.alias['#nsdb'] = runtimeDir
+
+		// Auto-import des composables
+		addImportsDir(resolve(runtimeDir, 'composables'))
 
 		if (options.withStores) {
-			addImportsDir(resolve('./runtime/stores'))
+			addImportsDir(resolve(runtimeDir, 'stores'))
 		}
 
-		// Ajout de types
-		nuxt.options.alias['#nsdb'] = resolve('.')
+		// Injection du plugin (Supabase, etc.)
+		addPlugin(resolve(runtimeDir, 'plugins/nsdb'))
 	}
 })

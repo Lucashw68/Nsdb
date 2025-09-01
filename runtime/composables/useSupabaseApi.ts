@@ -1,5 +1,13 @@
+import { useSupabaseClient } from '#imports'
+
 export const useSupabaseApi = () => {
-	const supabase = useSupabaseClient();
+	// const supabase = useSupabaseClient();
+	// const supabase = useNuxtApp().$nsdbSupabase
+	const supabase = useSupabaseClient?.()
+
+	if (!supabase) {
+		throw new Error('[nsdb] Supabase client not found. Did you forget to install @nuxtjs/supabase in your app?')
+	}
 
 	// ############################################################
 	// # Basic CRUD

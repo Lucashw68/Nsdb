@@ -65,21 +65,21 @@ entries.forEach(({ name }) => {
 
 	const typeName = capitalize(name)
 	const content = `import { createDbStore } from '@lucashw68/nsdb/createDbStore''
-import type { Tables } from '../../types/database.types'
+		import type { Tables } from '~/types/database.types'
 
-type ${typeName} = Tables<'${name}'>
+		type ${typeName} = Tables<'${name}'>
 
-const baseStore = createDbStore<${typeName}>('${name}', {
-	key: 'id',
-	orderBy: 'updated_at',
-	defaultSort: 'desc',
-})
+		const baseStore = createDbStore<${typeName}>('${name}', {
+			key: 'id',
+			orderBy: 'updated_at',
+			defaultSort: 'desc',
+		})
 
-export const ${composableName} = defineStore('${name}', () => {
-	const store = baseStore()
-	return { ...store }
-})
-`
+		export const ${composableName} = defineStore('${name}', () => {
+			const store = baseStore()
+			return { ...store }
+		})
+	`
 
 	fs.writeFileSync(filePath, content)
 	console.log(`✅ ${fileName} généré.`)
