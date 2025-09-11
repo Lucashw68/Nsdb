@@ -1,4 +1,4 @@
-// import { modelMap } from '@/types/models'
+// import { modelMap } from '~/types/models'
 
 // export const useEntities = () => {
 // 	const entities = {} as {

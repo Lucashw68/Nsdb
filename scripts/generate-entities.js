@@ -5,9 +5,13 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { Project, SyntaxKind, Node } from 'ts-morph'
 
+// 📍 Get current working directory
 const cwd = process.cwd()
+
+// 📄 Input: models.ts
 const modelsPath = path.resolve(cwd, 'nsdb/models.ts')
-const outputDir = path.resolve(cwd, 'stores')
+// 📂 Output: entities/
+const outputDir = path.resolve(cwd, 'nsdb/entities')
 
 if (!fs.existsSync(modelsPath)) {
 	console.error(`❌ Fichier introuvable : ${modelsPath}`)
@@ -26,7 +30,6 @@ const project = new Project({
 })
 
 const sourceFile = project.addSourceFileAtPath(modelsPath)
-
 const modelMapVar = sourceFile.getVariableDeclarationOrThrow('modelMap')
 const initializer = modelMapVar.getInitializer()
 
@@ -36,7 +39,6 @@ if (!initializer) {
 }
 
 let obj
-
 if (initializer.getKind() === SyntaxKind.AsExpression) {
 	obj = initializer.getExpression()
 } else {
@@ -48,14 +50,20 @@ if (!Node.isObjectLiteralExpression(obj)) {
 	process.exit(1)
 }
 
+if (!fs.existsSync(outputDir)) {
+	fs.mkdirSync(outputDir)
+}
+
 const entries = obj.getProperties().map(prop => {
 	const name = prop.getName().replace(/['"]/g, '')
 	return { name }
 })
 
-entries.forEach(({ name }) => {
-	const composableName = `use${capitalize(name)}Store`
-	const fileName = `${composableName}.ts`
+// 🧠 Template for each Entity file
+const generateEntityFile = (name) => {
+	const entityName = `${capitalize(name)}Entity`
+	const typeName = capitalize(name)
+	const fileName = `${entityName}.ts`
 	const filePath = path.resolve(outputDir, fileName)
 
 	if (fs.existsSync(filePath)) {
@@ -63,27 +71,21 @@ entries.forEach(({ name }) => {
 		return
 	}
 
-	const typeName = capitalize(name)
-	const content = `import { createDbStore } from '@lucashw68/nsdb/createDbStore''
-		import type { Tables } from '~/types/database.types'
+	const content = `import type { Tables } from '~/types/database.types'
+import type { EntityField } from './types'
 
-		type ${typeName} = Tables<'${name}'>
+type ${typeName} = Tables<'${name}'>
 
-		const baseStore = createDbStore<${typeName}>('${name}', {
-			key: 'id',
-			orderBy: 'updated_at',
-			defaultSort: 'desc',
-		})
-
-		export const ${composableName} = defineStore('${name}', () => {
-			const store = baseStore()
-			return { ...store }
-		})
-	`
+export const ${entityName}: Record<keyof ${typeName}, EntityField> = {
+	// TODO: Fill with correct field metadata
+} as const
+`
 
 	fs.writeFileSync(filePath, content)
 	console.log(`✅ ${fileName} généré.`)
-})
+}
+
+entries.forEach(({ name }) => generateEntityFile(name))
 
 function capitalize(str) {
 	return str.charAt(0).toUpperCase() + str.slice(1)
