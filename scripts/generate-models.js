@@ -12,8 +12,8 @@ const __dirname = path.dirname(__filename)
 const typesPath = path.resolve(cwd, 'types/database.types.ts')
 
 const nsdbDir = path.resolve(cwd, 'nsdb')
-if (!existsSync(nsdbDir)) {
-	mkdirSync(nsdbDir, { recursive: true })
+if (!fs.existsSync(nsdbDir)) {
+	fs.mkdirSync(nsdbDir, { recursive: true })
 }
 const outputPath = path.join(nsdbDir, 'models.ts')
 const tsconfigPath = path.resolve(cwd, 'tsconfig.json')
