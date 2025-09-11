@@ -8,7 +8,7 @@ const commands = {
 	'generate:types': path.resolve(__dirname, '../scripts/generate-types.js'),
 	'generate:models': path.resolve(__dirname, '../scripts/generate-models.js'),
 	'generate:stores': path.resolve(__dirname, '../scripts/generate-stores.js'),
-	'generate:entities': path.resolve(__dirname, '../scripts/generate-etities.js'),
+	'generate:entities': path.resolve(__dirname, '../scripts/generate-entities.js'),
 	'generate:all': [
 		path.resolve(__dirname, '../scripts/generate-types.js'),
 		path.resolve(__dirname, '../scripts/generate-models.js'),
