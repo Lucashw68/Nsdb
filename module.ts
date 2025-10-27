@@ -17,6 +17,7 @@ export default defineNuxtModule({
 	setup(options, nuxt) {
 		const { resolve } = createResolver(import.meta.url)
 		const runtimeDir = resolve('./runtime')
+		const typesDir = resolve('./types')
 
 		// Alias interne (#nsdb → module)
 		nuxt.options.alias['#nsdb'] = runtimeDir
@@ -27,5 +28,7 @@ export default defineNuxtModule({
 		if (options.withStores) {
 			addImportsDir(resolve(runtimeDir, 'stores'))
 		}
+
+		addImportsDir(resolve(typesDir))
 	}
 })

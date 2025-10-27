@@ -1,40 +1,61 @@
-# 📦 NSDB — Nuxt Supabase Database Layer
+# 🧬 NSDB — Nuxt Supabase Data Bridge  
+*(a.k.a. Nuxt Supabase Database Layer)*
 
-Un layer Nuxt 3 pour gérer automatiquement modèles, stores, et accès Supabase.
+[![npm version](https://img.shields.io/npm/v/@lucashw68/nsdb.svg?color=42b883)](https://www.npmjs.com/package/@lucashw68/nsdb)
+[![license](https://img.shields.io/npm/l/@lucashw68/nsdb.svg?color=42b883)](./LICENSE)
+![typescript](https://img.shields.io/badge/TypeScript-Ready-3178C6?logo=typescript)
+![nuxt](https://img.shields.io/badge/Nuxt_3-Layer-00DC82?logo=nuxt.js)
+![bundle size](https://img.shields.io/bundlephobia/minzip/@lucashw68/nsdb?label=minzip&color=42b883)
+
+> **NSDB** est un **Layer/Module Nuxt 3** qui connecte automatiquement ta base **Supabase** à des **stores Pinia typés**, avec synchronisation en temps réel, persistance locale, et API unifiée (`useModel`, `useEntitiesStore`).
 
 ---
 
-## 🚀 Installation
+## ⚙️ Installation
 
-1. **Ajoute le layer dans ton projet Nuxt :**
+### 1. Depuis npm
 
 ```bash
-# Si tu utilises un chemin local :
-pnpm add -D ../nsdb
+npm install @lucashw68/nsdb
 # ou
-yarn add -D ../nsdb
+pnpm add @lucashw68/nsdb
 # ou
-npm install --save-dev ../nsdb
+yarn add @lucashw68/nsdb
 ```
 
-
-2. **Ajoute le layer dans `nuxt.config.ts` :**
+### 2. Ajouter le module dans ton projet Nuxt
 
 ```ts
+// nuxt.config.ts
 export default defineNuxtConfig({
-	layers: ['../nsdb'],
+  modules: ['@lucashw68/nsdb'],
+  nsdb: {
+    withStores: true // optionnel : auto-importer les stores générés
+  }
 })
 ```
 
-3. **Configure les variables d'environnement dans `.env` :**
+### 3. Variables d’environnement `.env`
 
-```SUPABASE_PROJECT_ID=ton_project_id```
+```bash
+SUPABASE_PROJECT_ID=ton_project_id
+```
 
 ---
 
-## 🔧 Génération des types et modèles
+## 🧾 Prérequis
 
-```bash
+- Supabase configuré  
+- Supabase CLI installé (`npm install -g supabase`)  
+- Nuxt 3 + Pinia installés  
+
+---
+
+## 🛠️ Scripts de génération
+
+Ajoute ceci à ton `package.json` :
+
+```json
 {
   "scripts": {
     "generate:types": "tsx scripts/generate-types.ts",
@@ -45,56 +66,155 @@ export default defineNuxtConfig({
 }
 ```
 
-## 🛠️ Utilisation dans l'app
+| Étape | Commande | Fichier généré | Description |
+|-------|-----------|----------------|--------------|
+| 1️⃣ | `npm run generate:types` | `types/database.types.ts` | Génère les types depuis Supabase |
+| 2️⃣ | `npm run generate:models` | `types/models.ts` | Crée `ModelTypes` + `modelMap` |
+| 3️⃣ | `npm run generate:stores` | `stores/entities/useXStore.ts` | Génère les stores Pinia typés |
+| 4️⃣ | `npm run generate:all` | — | Enchaîne les 3 étapes |
 
-### Accès générique à un modèle :
+> ⚙️ Les stores ne sont jamais écrasés.  
+> Chaque projet garde le contrôle sur ses modèles et extensions.
 
+---
+
+## 🧩 Utilisation
+
+### Accès générique via `useModel`
 ```ts
-const { items, create, update, remove } = useSupabaseModel('playlists')
+const playlists = useModel('playlists')
+
+await playlists.fetch()
+playlists.create({ title: 'My Playlist' })
 ```
 
-### Ou via tous les modèles en une fois :
+> 🔁 Typage automatique basé sur `ModelTypes`.
 
+---
+
+### Accès global à tous les stores via `useEntitiesStore`
 ```ts
-const { songs, playlists } = useSupabaseModels()
-songs.create(...)
+const { playlists, songs, samples } = useEntitiesStore()
+
+await playlists.fetch()
+samples.items.value.forEach(sample => console.log(sample))
 ```
+
+---
+
+### API des stores typés
+```ts
+{
+  items,       // données locales (ref)
+  getById,     // recherche par id
+  create,      // insertion
+  update,      // modification
+  remove,      // suppression
+  fetch,       // récupération depuis Supabase
+  sync         // synchronisation offline/online
+}
+```
+
+---
 
 ## 📁 Structure générée
 
-```bash
+```
 types/
-  ├── database.types.ts  ← généré par Supabase CLI
-  └── models.ts          ← généré par le layer (modelMap + ModelTypes)
+  ├── database.types.ts   ← généré via Supabase CLI
+  └── models.ts           ← généré par NSDB (ModelTypes + modelMap)
 stores/entities/
-  └── useXStore.ts       ← généré automatiquement par modèle
+  ├── usePlaylistStore.ts ← généré automatiquement
+  └── useSongStore.ts
 ```
 
-## 📚 Exemples
+---
 
-Un projet d’exemple est disponible dans :
+## 🧱 Architecture interne
+
+```
+runtime/
+├── composables/
+│   ├── useModel.ts
+│   ├── useEntitiesStore.ts
+│   └── useSupabaseModels.ts
+├── stores/
+│   ├── createDbStore.ts
+│   └── createSingletonDbStore.ts
+scripts/
+├── generate-types.ts
+├── generate-models.ts
+└── generate-stores.ts
+```
+
+---
+
+## 🧪 Exemple d’intégration
+
+Un projet de démonstration complet est disponible dans :
+
+```
+examples/test-app/
+```
+
+---
+
+## 📦 Publication
+
+Si tu veux publier le module sur npm :
 
 ```bash
-examples/test-app
+npm publish --access public
 ```
 
-## Makefile
+Et dans ton `package.json`, expose les types :
 
-### Commit, tag, push and publish (with default commit message)
+```json
+"types": "./types/index.d.ts"
+```
+
+---
+
+## ✨ Roadmap
+
+- [x] Génération automatique des types Supabase  
+- [x] Création de `ModelTypes` + `modelMap`  
+- [x] Génération automatique de stores typés  
+- [x] Accès via `useModel` et `useEntitiesStore`  
+- [ ] Support des stores singletons (`createSingletonDbStore`)  
+- [ ] Hooks (`onCreate`, `onUpdate`, `onDelete`)  
+- [ ] Gestion offline + resynchronisation automatique  
+- [ ] Publication NPM automatisée  
+
+---
+
+## 🧰 Makefile
+
+### Déploiement standard
 ```bash
 make deploy
 ```
 
-### Custom commit message
+### Avec message personnalisé
 ```bash
 make deploy MESSAGE="add example app"
 ```
 
-### Bump minor version instead of patch
+### Version mineure
 ```bash
 make deploy VERSION_TYPE=minor MESSAGE="new features"
 ```
 
+---
+
+## 🤝 Contribution
+
+1. Clone le dépôt  
+2. Crée un projet de test dans `examples/`  
+3. Propose une PR 💚  
+
+---
+
 ## 📄 Licence
 
-MIT License
+MIT License © 2025 [@lucashw68](https://github.com/lucashw68)

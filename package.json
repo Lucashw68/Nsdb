@@ -28,11 +28,11 @@
 		"./useSupabaseApiStorage": "./runtime/composables/useSupabaseApiStorage.ts",
 		"./useSupabaseModels": "./runtime/composables/useSupabaseModels.ts",
 		"./createDbStore": "./runtime/stores/createDbStore.ts",
-		"./createSingletonDbStore": "./runtime/stores/createSingletonDbStore.ts"
+		"./createSingletonDbStore": "./runtime/stores/createSingletonDbStore.ts",
+		"./types/entities": "./types/entities.ts"
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.56.0",
-		"nuxt": "^4.0.1",
 		"ts-morph": "^20.0.0",
 		"tsx": "^4.20.5"
 	},

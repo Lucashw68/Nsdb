@@ -53,6 +53,7 @@ export const useSupabaseApi = () => {
 			.from(resource)
 			.update(payload)
 			.eq('id', id);
+			.select()
 		return handleResponse(data, error, `UPDATE ${resource}/${id}`);
 	}
 
