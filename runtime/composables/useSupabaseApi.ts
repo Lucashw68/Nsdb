@@ -52,8 +52,8 @@ export const useSupabaseApi = () => {
 		const { data, error } = await supabase
 			.from(resource)
 			.update(payload)
-			.eq('id', id);
-			.select()
+			.eq('id', id)
+			.select();
 		return handleResponse(data, error, `UPDATE ${resource}/${id}`);
 	}
 
