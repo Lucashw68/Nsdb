@@ -22,6 +22,10 @@ export default defineNuxtModule({
 		// Alias interne (#nsdb → module)
 		nuxt.options.alias['#nsdb'] = runtimeDir
 
+		// Alias pour les tables générées (#nsdb/tables → app)
+		const projectRoot = nuxt.options.srcDir || nuxt.options.rootDir
+   		nuxt.options.alias['#nsdb/tables'] = resolve(projectRoot, 'nsdb/tables')
+
 		// Auto-import des composables
 		addImportsDir(resolve(runtimeDir, 'composables'))
 
