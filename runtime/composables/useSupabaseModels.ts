@@ -1,5 +1,5 @@
-import { modelMap } from '#build/nsdb/models'
-import type { ModelTypes } from '#build/nsdb/models'
+import { modelMap } from '~/nsdb/models'
+import type { ModelTypes } from '~/nsdb/models'
 import { useSupabaseApi } from './useSupabaseApi'
 import { Ref, ref } from 'vue'
 
