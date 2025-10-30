@@ -1,25 +1,26 @@
-import { defineNuxtModule, addImportsDir, createResolver } from '@nuxt/kit'
+import { defineNuxtModule, addImportsDir, addTemplate, createResolver } from '@nuxt/kit'
 
 export default defineNuxtModule({
-  meta: { name: 'nsdb', configKey: 'nsdb' },
+  meta: { name: '@lucashw68/nsdb', configKey: 'nsdb' },
   defaults: { withStores: true },
   setup(options, nuxt) {
-    const rModule = createResolver(import.meta.url)
-    const rApp = createResolver(nuxt.options.srcDir)
+    const rMod = createResolver(import.meta.url)
+	
+    const runtimeDir = rMod.resolve('./runtime')
+    const typesDir   = rMod.resolve('./types')
 
-    const runtimeDir = rModule.resolve('./runtime')
-    const typesDir   = rModule.resolve('./types')
+    // alias interne (ok)
+    nuxt.options.alias['#nsdb'] = runtimeDir
 
-    // nuxt.options.alias['#nsdb'] = runtimeDir
+    // 🔧 proxy: #build/nsdb/models -> re-export de l'app
+    addTemplate({
+      filename: 'nsdb/models.ts',
+      write: true,
+      getContents: () => `export * from '~/nsdb/models'`
+    })
 
-    // 👇 point runtime to the app’s generated types/models.ts
-    nuxt.options.alias['#nsdb/models'] = rApp.resolve('types/models.ts')
-
-    // (if you use the tables barrel alias)
-    nuxt.options.alias['#nsdb/tables'] = rApp.resolve('nsdb/tables.ts')
-
-    addImportsDir(rModule.resolve(runtimeDir, 'composables'))
-    if (options.withStores) addImportsDir(rModule.resolve(runtimeDir, 'stores'))
+    addImportsDir(rMod.resolve(runtimeDir, 'composables'))
+    if (options.withStores) addImportsDir(rMod.resolve(runtimeDir, 'stores'))
     addImportsDir(typesDir)
   }
 })
