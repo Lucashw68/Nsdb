@@ -10,7 +10,7 @@ export default defineNuxtModule({
     const runtimeDir = rModule.resolve('./runtime')
     const typesDir   = rModule.resolve('./types')
 
-    nuxt.options.alias['#nsdb'] = runtimeDir
+    // nuxt.options.alias['#nsdb'] = runtimeDir
 
     // 👇 point runtime to the app’s generated types/models.ts
     nuxt.options.alias['#nsdb/models'] = rApp.resolve('types/models.ts')
