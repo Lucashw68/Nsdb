@@ -53,7 +53,6 @@
 		"generate:types": "npx supabase gen types typescript --project-id <id> > types/database.types.ts",
 		"generate:models": "node scripts/generate-models.ts",
 		"generate:stores": "node scripts/generate-stores.ts",
-		"generate:entities": "node scripts/generate-entities.ts",
 		"generate:all": "npm run generate:types && npm run generate:models && npm run generate:stores && npm run generate:entities",
 		"clear": "node scripts/clear.js"
 	},

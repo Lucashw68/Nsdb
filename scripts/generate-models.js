@@ -1,91 +1,75 @@
 #!/usr/bin/env node
-
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { Project } from 'ts-morph'
 
 const cwd = process.cwd()
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
 const typesPath = path.resolve(cwd, 'types/database.types.ts')
-
-const nsdbDir = path.resolve(cwd, 'nsdb')
-if (!fs.existsSync(nsdbDir)) {
-	fs.mkdirSync(nsdbDir, { recursive: true })
-}
-const outputPath = path.join(nsdbDir, 'models.ts')
-const tsconfigPath = path.resolve(cwd, 'tsconfig.json')
+const outDir = path.resolve(cwd, 'nsdb/models')
+const barrelPath = path.resolve(cwd, 'nsdb/models.ts')
+const templatePath = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/model.template.ts') // ajuste si besoin
 
 if (!fs.existsSync(typesPath)) {
-	console.error(`❌ Fichier introuvable : ${typesPath}`)
-	process.exit(1)
-}
-if (!fs.existsSync(tsconfigPath)) {
-	console.error(`❌ tsconfig.json introuvable à la racine du projet.`)
-	process.exit(1)
+    console.error(`❌ Fichier introuvable : ${typesPath}`)
+    process.exit(1)
 }
 
-const project = new Project({
-	tsConfigFilePath: tsconfigPath,
-	skipAddingFilesFromTsConfig: true
-})
+const project = new Project({ skipAddingFilesFromTsConfig: true })
+const sf = project.addSourceFileAtPath(typesPath)
 
-const sourceFile = project.addSourceFileAtPath(typesPath)
-
-let dbType
+let db
 try {
-	dbType = sourceFile.getTypeAliasOrThrow('Database')
-} catch (err) {
-	console.error(`❌ Type alias "Database" introuvable dans ${typesPath}`)
-	process.exit(1)
+    db = sf.getTypeAliasOrThrow('Database')
+} catch {
+    console.error(`❌ Type alias "Database" introuvable dans ${typesPath}`)
+    process.exit(1)
 }
 
-const publicType = dbType.getType().getProperty('public')?.getTypeAtLocation(dbType)
-const tablesType = publicType?.getProperty('Tables')?.getTypeAtLocation(dbType)
-
+const publicType = db.getType().getProperty('public')?.getTypeAtLocation(db)
+const tablesType = publicType?.getProperty('Tables')?.getTypeAtLocation(db)
 if (!tablesType) {
-	console.error('❌ Impossible de trouver Database["public"]["Tables"]')
-	process.exit(1)
+    console.error('❌ Impossible de trouver Database["public"]["Tables"]')
+    process.exit(1)
+}
+const tables = tablesType.getProperties().map(p => p.getName())
+
+const tpl = fs.readFileSync(templatePath, 'utf8')
+
+fs.mkdirSync(outDir, { recursive: true })
+const toPascal = s => s.replace(/(^|[_-]\w)/g, m => m.replace(/[_-]/,'').toUpperCase())
+const singular = s => s.endsWith('s') ? s.slice(0, -1) : s
+
+const exports = []
+
+for (const table of tables) {
+    const pascal = toPascal(table)
+    const row = `${pascal}Row`
+
+    // si tu as des stores Pinia générés : ~/stores/use<PascalSingular>Store
+    const storeName = `use${toPascal(singular(table))}Store`
+    const storePath = `~/stores/use${toPascal(singular(table))}Store`
+
+    const WITH_STORE = fs.existsSync(
+      path.resolve(cwd, `stores/use${toPascal(singular(table))}Store.ts`)
+    )
+
+    const code = tpl
+      .replace(/__TABLE__/g, table)
+      .replace(/__PASCAL__/g, pascal)
+      .replace(/__ROW__/g, row)
+      .replace(
+        /__STORE_IMPORT__/g,
+        WITH_STORE ? `import { ${storeName} } from '${storePath}'` : ''
+      )
+      .replace(
+        /__STORE_CREATOR__/g,
+        WITH_STORE ? `(() => ${storeName}())` : `undefined`
+      )
+
+    const file = path.join(outDir, `${table}.ts`)
+    fs.writeFileSync(file, code, 'utf8')
+    exports.push(`export * from './models/${table}' // use${pascal}, ${pascal}Schema`)
 }
 
-const tableNames = tablesType.getProperties().map(p => p.getName())
-
-// Génération des imports
-const imports =
-	tableNames
-		.map(name => {
-			const composableName = `use${capitalize(singular(name))}Store`
-			return `import { ${composableName} } from './use${capitalize(singular(name))}Store'`
-		})
-		.join('\n') + '\n\n'
-
-// Interface ModelTypes
-const modelTypes =
-	`import type { Tables } from '~/types/database.types'\n\n` +
-	'export interface ModelTypes {\n' +
-	tableNames.map(name => `  ${name}: Tables<'${name}'>`).join('\n') +
-	'\n}\n\n'
-
-// modelMap
-const modelMap =
-	'export const modelMap = {\n' +
-	tableNames
-		.map(name => `  ${name}: ${`use${capitalize(singular(name))}Store`}`)
-		.join(',\n') +
-	'\n} as const\n'
-
-fs.mkdirSync(path.dirname(outputPath), { recursive: true })
-fs.writeFileSync(outputPath, imports + modelTypes + modelMap)
-
-console.log(`✅ Fichier models.ts généré avec ${tableNames.length} tables.`)
-
-// Helpers
-function capitalize(str) {
-	return str.charAt(0).toUpperCase() + str.slice(1)
-}
-
-function singular(str) {
-	return str.endsWith('s') ? str.slice(0, -1) : str
-}
+fs.writeFileSync(barrelPath, exports.join('\n') + '\n', 'utf8')
+console.log(`✅ Generated ${tables.length} model modules into nsdb/models/`)
