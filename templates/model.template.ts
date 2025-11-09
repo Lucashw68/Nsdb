@@ -1,17 +1,11 @@
 // __IMPORTS__
 import type { Tables } from '~/types/database.types'
-import type { EntityField } from '@lucashw68/nsdb/types/entities'
 import { computed } from 'vue'
 import { useSupabaseModel } from '#nsdb/composables/useSupabaseModel'
+import { __PASCAL__Schema } from '~/nsdb/schemas/__TABLE__'
 __STORE_IMPORT__
 
 export type __ROW__ = Tables<'__TABLE__'>
-
-/** ----- Schema (entities) ----- */
-export const __PASCAL__Schema: Record<keyof __ROW__, EntityField> = {
-	// id: { type: 'uuid', pk: true, readonly: true },
-	// name: { type: 'string', required: true },
-} as const
 
 function __emptyFromSchema(): Partial<__ROW__> {
 	const out: Record<string, any> = {}
@@ -38,8 +32,8 @@ export function use__PASCAL__(opts: { store?: boolean } = {}) {
 	const fields = Object.keys(__PASCAL__Schema)
 	const editableKeys = computed(() =>
 		Object.entries(__PASCAL__Schema as Record<string, any>)
-			.filter(([, d]) => !d.readonly)
-			.map(([k]) => k)
+		.filter(([, d]) => !d.readonly)
+		.map(([k]) => k)
 	)
 
 	return {
