@@ -11,8 +11,8 @@ const schemasDir  	= path.resolve(cwd, 'nsdb/schemas')
 const schemasBarrel = path.resolve(cwd, 'nsdb/schemas.ts')
 
 // adjust these paths if you ship templates from your module
-const tplModelPath  = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/model.tpl.ts')
-const tplSchemaPath = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/schema.tpl.ts')
+const tplModelPath  = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/model.template.ts')
+const tplSchemaPath = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/schema.template.ts')
 
 if (!fs.existsSync(typesPath)) {
 	console.error(`❌ Missing: ${typesPath}`); process.exit(1)
