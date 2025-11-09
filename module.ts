@@ -1,62 +1,83 @@
 import {
-    defineNuxtModule,
-    addImportsDir,
-    addTemplate,
-    createResolver,
-    logger
+	defineNuxtModule,
+	addImportsDir,
+	addTemplate,
+	createResolver,
+	logger
 } from '@nuxt/kit'
 import { existsSync } from 'node:fs'
 
 export interface NsdbOptions {
-    withStores?: boolean
+	withStores?: boolean
 }
 
 export default defineNuxtModule<NsdbOptions>({
-    meta: { name: '@lucashw68/nsdb', configKey: 'nsdb' },
-    defaults: { withStores: true },
+	meta: { name: '@lucashw68/nsdb', configKey: 'nsdb' },
+	defaults: { withStores: true },
 
-    setup(options, nuxt) {
-      const rMod = createResolver(import.meta.url)
-      const rApp = createResolver(nuxt.options.srcDir)
+	setup(options, nuxt) {
+		const rMod = createResolver(import.meta.url)
+		const rApp = createResolver(nuxt.options.srcDir)
 
-      const runtimeDir = rMod.resolve('./runtime')
-      const typesDir   = rMod.resolve('./types')
+		const runtimeDir = rMod.resolve('./runtime')
+		const typesDir = rMod.resolve('./types')
 
-      // 1) Alias interne vers le runtime du module
-      nuxt.options.alias['#nsdb'] = runtimeDir
+		// 1) Alias interne vers le runtime du module
+		nuxt.options.alias['#nsdb'] = runtimeDir
 
-      // 2) Proxy de build pour le barrel d'app ~/nsdb/models.ts
-      //    -> importable partout via:  import { useX } from '#build/nsdb/models'
-      const appModelsAbs = rApp.resolve('nsdb/models.ts')
-      const appModelsExists = existsSync(appModelsAbs)
+		// 2) Proxies de build pour les barrels d'app:
+		//    -> import { ... } from '#build/nsdb/models'
+		//    -> import { ... } from '#build/nsdb/schemas'
+		const appModelsAbs = rApp.resolve('nsdb/models.ts')
+		const appSchemasAbs = rApp.resolve('nsdb/schemas.ts')
+		const appModelsExists = existsSync(appModelsAbs)
+		const appSchemasExists = existsSync(appSchemasAbs)
 
-      addTemplate({
-        filename: 'nsdb/models.ts',
-        write: true,
-        getContents: () =>
-          appModelsExists
-            ? `export * from '~/nsdb/models'`
-            : `// Fallback neutre: générez vos modules avec nsdb:models
-  export {}`
-      })
+		addTemplate({
+			filename: 'nsdb/models.ts',
+			write: true,
+			getContents: () =>
+				appModelsExists
+					? `export * from '~/nsdb/models'`
+					: `// Fallback neutre: générez vos modules avec nsdb:models
+					export {}`
+		})
 
-      // Regénère le proxy si ~/nsdb/models.ts apparaît en dev
-      nuxt.hook('builder:watch', (_event, relPath) => {
-        if (!relPath) return
-        const normalized = relPath.replace(/^[./]+/, '')
-        if (normalized === 'nsdb/models.ts') {
-          addTemplate({
-            filename: 'nsdb/models.ts',
-            write: true,
-            getContents: () => `export * from '~/nsdb/models'`
-          })
-          logger.success('[nsdb] Proxy #build/nsdb/models mis à jour (~/nsdb/models.ts détecté).')
-        }
-      })
+		addTemplate({
+			filename: 'nsdb/schemas.ts',
+			write: true,
+			getContents: () =>
+				appSchemasExists
+					? `export * from '~/nsdb/schemas'`
+					: `// Fallback neutre: générez vos schémas avec nsdb:models (qui émet aussi nsdb/schemas)
+					export {}`
+		})
 
-      // 3) Auto-imports du runtime du module
-      addImportsDir(rMod.resolve(runtimeDir, 'composables'))
-      if (options.withStores) addImportsDir(rMod.resolve(runtimeDir, 'stores'))
-      addImportsDir(typesDir)
-    }
+		// Regénère les proxies si ~/nsdb/models.ts ou ~/nsdb/schemas.ts apparaissent en dev
+		nuxt.hook('builder:watch', (_event, relPath) => {
+			if (!relPath) return
+			const normalized = relPath.replace(/^[./]+/, '')
+			if (normalized === 'nsdb/models.ts') {
+				addTemplate({
+					filename: 'nsdb/models.ts',
+					write: true,
+					getContents: () => `export * from '~/nsdb/models'`
+				})
+				logger.success('[nsdb] Proxy #build/nsdb/models mis à jour (~/nsdb/models.ts détecté).')
+			}
+			if (normalized === 'nsdb/schemas.ts') {
+				addTemplate({
+					filename: 'nsdb/schemas.ts',
+					write: true,
+					getContents: () => `export * from '~/nsdb/schemas'`
+				})
+				logger.success('[nsdb] Proxy #build/nsdb/schemas mis à jour (~/nsdb/schemas.ts détecté).')
+			}
+		})
+
+		// 3) Auto-imports du runtime du module
+		addImportsDir(rMod.resolve(runtimeDir, 'composables'))
+		if (options.withStores) addImportsDir(rMod.resolve(runtimeDir, 'stores'))
+		addImportsDir(typesDir)
+	}
 })

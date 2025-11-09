@@ -4,18 +4,18 @@ import type { Ref } from 'vue'
 import { ref } from 'vue'
 
 export interface StoreLike<T> {
-  items: Ref<T[]>
-  getById: (id: string) => T | null
-  create: (payload: Partial<T>) => Promise<T | null>
-  update: (id: string, payload: Partial<T>) => Promise<T | null>
-  remove: (id: string) => void | Promise<void>
-  fetchFromSupabase: () => Promise<T[]>
-  subscribeToChanges?: () => void
+	items: Ref<T[]>
+	getById: (id: string) => T | null
+	create: (payload: Partial<T>) => Promise<T | null>
+	update: (id: string, payload: Partial<T>) => Promise<T | null>
+	remove: (id: string) => void | Promise<void>
+	fetchFromSupabase: () => Promise<T[]>
+	subscribeToChanges?: () => void
 }
 
 type Options<T> =
-  | boolean
-  | { store?: boolean; storeCreator?: () => StoreLike<T> }
+	| boolean
+	| { store?: boolean; storeCreator?: () => StoreLike<T> }
 
 /**
  * Unified CRUD over a Supabase model.
@@ -24,8 +24,8 @@ type Options<T> =
  * Store mode (Pinia/offline): pass `{ store: true, storeCreator }`
  */
 export function useSupabaseModel<TRow>(
-  modelName: string,
-  opts: Options<TRow> = false
+  	modelName: string,
+  	opts: Options<TRow> = false
 ) {
 	const useStore = typeof opts === 'boolean' ? opts : !!opts.store
 	const storeCreator =

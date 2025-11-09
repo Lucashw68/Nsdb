@@ -1,8 +1,6 @@
 import { useSupabaseClient } from '#imports'
 
 export const useSupabaseApi = () => {
-	// const supabase = useSupabaseClient();
-	// const supabase = useNuxtApp().$nsdbSupabase
 	const supabase = useSupabaseClient?.()
 
 	if (!supabase) {
