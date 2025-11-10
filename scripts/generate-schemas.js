@@ -3,7 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { Project } from 'ts-morph'
 import { fileURLToPath } from 'url'
-import { toPascal } from './helpers/names.js'
+import { toPascal } from '../helpers/names.js'
 
 const cwd = process.cwd()
 const typesPath = path.resolve(cwd, 'types/database.types.ts')
