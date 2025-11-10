@@ -16,14 +16,14 @@ function __emptyFromSchema(): Partial<__ROW__> {
 }
 
 /** ----- DX handle ----- */
-export function use__PASCAL__(opts: { store?: boolean } = {}) {
+export function __HOOK__(opts: { store?: boolean } = {}) {
 	const model = useSupabaseModel<__ROW__>(
 		'__TABLE__',
 		{ store: !!opts.store, storeCreator: __STORE_CREATOR__ }
 	)
 
-	const list  = model.items
-	const all   = async () => {
+	const list = model.items
+	const all = async () => {
 		const rows = await model.fetch()
 		list.value = Array.isArray(rows) ? rows : []
 		return list.value as __ROW__[]
@@ -32,8 +32,8 @@ export function use__PASCAL__(opts: { store?: boolean } = {}) {
 	const fields = Object.keys(__PASCAL__Schema)
 	const editableKeys = computed(() =>
 		Object.entries(__PASCAL__Schema as Record<string, any>)
-		.filter(([, d]) => !d.readonly)
-		.map(([k]) => k)
+			.filter(([, d]) => !d.readonly)
+			.map(([k]) => k)
 	)
 
 	return {
