@@ -8,7 +8,7 @@ const cwd = process.cwd()
 const typesPath = path.resolve(cwd, 'types/database.types.ts')
 const outDir = path.resolve(cwd, 'nsdb/models')
 const barrel = path.join(outDir, 'index.ts')
-const tplPath = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/model.tpl.ts')
+const tplPath = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/model.template.ts')
 
 if (!fs.existsSync(typesPath)) {
 	console.error(`❌ Missing: ${typesPath}`); process.exit(1)
