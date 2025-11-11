@@ -21,6 +21,14 @@ let db
 try { db = sf.getTypeAliasOrThrow('Database') }
 catch { console.error('❌ Type alias "Database" not found'); process.exit(1) }
 
+const extractEnumName = (typeText) => {
+	// make it robust to single/double quotes and case, e.g. Database["public"]["Enums"]["STATUS"]
+	// or Database['public']['Enums']['status']
+	const re = /Database\[\s*['"]public['"]\s*\]\s*\[\s*['"]Enums['"]\s*\]\s*\[\s*['"]([^'"]+)['"]\s*\]/i
+	const m = String(typeText).match(re)
+	return m?.[1] || null
+}
+
 const publicType = db.getType().getProperty('public')?.getTypeAtLocation(sf)
 const tablesType = publicType?.getProperty('Tables')?.getTypeAtLocation(sf)
 const enumsType = publicType?.getProperty('Enums')?.getTypeAtLocation(sf)
@@ -36,7 +44,7 @@ if (enumsType) {
 }
 
 const guessFieldType = (tStr) => {
-	const t = String(tStr).toLowerCase()
+	const t = String(tStr).toLowerCase().replace(/"/g, "'")
 	if (t.includes("database['public']['enums']")) return 'enum'
 	if (t.includes('uuid')) return 'uuid'
 	if (t.includes('timestamp') || t.includes('date')) return 'timestamp'
@@ -121,12 +129,9 @@ for (const prop of tablesType.getProperties()) {
 
 		// detect enum
 		let enumAttach = ''
-		if (rowTText.includes(`Database['public']['Enums']`)) {
-			// Try to extract enum name from text: Database['public']['Enums']['status']
-			const m = rowTText.match(/Database\['public'\]\['Enums'\]\['([^']+)'\]/)
-			if (m?.[1] && enumMap[m[1]]) {
-				enumAttach = `, enum: Enums.${enumMap[m[1]].pascal}Values`
-			}
+		const enumName = extractEnumName(rowTText)
+		if (enumName && enumMap[enumName]) {
+			enumAttach = `, enum: Enums.${enumMap[enumName].pascal}Values`
 		}
 
 		// type guess
