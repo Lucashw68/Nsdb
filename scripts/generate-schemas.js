@@ -35,6 +35,40 @@ const extractEnumName = (typeText) => {
 	return m?.[1] || null
 }
 
+const guessFieldType = (tStr) => {
+	const t = String(tStr).toLowerCase().replace(/"/g, "'")
+	if (t.includes("database['public']['enums']")) return 'enum'
+	if (t.includes('uuid')) return 'uuid'
+	if (t.includes('timestamp') || t.includes('date')) return 'timestamp'
+	if (t.includes('boolean') || t.includes('bool')) return 'boolean'
+	if (t.includes('number') || t.includes('int') || t.includes('numeric') || t.includes('float') || t.includes('double')) return 'number'
+	if (t.includes('json')) return 'json'
+	if (t.includes('string') || t.includes('text') || t.includes('varchar') || t.includes('char')) return 'string'
+	return 'unknown'
+}
+
+// NEW: find enum name across unions/apparent type
+const findEnumInType = (tsType, sf, enumMap) => {
+	const candidates = tsType.isUnion() ? tsType.getUnionTypes() : [tsType]
+	for (const c of candidates) {
+		const texts = [
+			c.getText(),
+			c.getApparentType().getText?.() ?? ''
+		]
+		for (const txt of texts) {
+			// 1) full Database['public']['Enums']['X'] match
+			const full = extractEnumName(txt)
+			if (full && enumMap[full]) return full
+			// 2) fallback: look for known enum token
+			for (const knownName of Object.keys(enumMap)) {
+				const token = new RegExp(`\\b${knownName}\\b`)
+				if (token.test(String(txt))) return knownName
+			}
+		}
+	}
+	return null
+}
+
 const publicType = db.getType().getProperty('public')?.getTypeAtLocation(sf)
 const tablesType = publicType?.getProperty('Tables')?.getTypeAtLocation(sf)
 const enumsType = publicType?.getProperty('Enums')?.getTypeAtLocation(sf)
@@ -48,18 +82,6 @@ if (enumsType) {
 		enumMap[name] = { pascal }
 	}
 }
-
-const guessFieldType = (tStr) => {
-	const t = String(tStr).toLowerCase().replace(/"/g, "'")
-	if (t.includes("database['public']['enums']")) return 'enum'
-	if (t.includes('uuid')) return 'uuid'
-	if (t.includes('timestamp') || t.includes('date')) return 'timestamp'
-	if (t.includes('boolean') || t.includes('bool')) return 'boolean'
-	if (t.includes('number') || t.includes('int') || t.includes('numeric') || t.includes('float') || t.includes('double')) return 'number'
-	if (t.includes('json')) return 'json'
-	if (t.includes('string') || t.includes('text') || t.includes('varchar') || t.includes('char')) return 'string'
-	return 'unknown'
-}	
 
 const readTpl = () => fs.readFileSync(tplPath, 'utf8')
 const linesBarrel = []
@@ -121,45 +143,33 @@ for (const prop of tablesType.getProperties()) {
 		const rowT = p.getTypeAtLocation(sf)
 		const rowTText = rowT.getText()
 
-		// required? from Insert optionality
+		// required? depuis l’optionalité dans Insert
 		const insertProp = insertType.getProperty(name)
 		let required = true
 		if (!insertProp) {
-			required = false // usually auto/readonly (id/created_at)
+			required = false // souvent auto/readonly (id/created_at)
 		} else {
 			const d = insertProp.getDeclarations()?.[0]
 			const isOptional = d?.hasQuestionToken?.() ?? false
 			required = !isOptional
 		}
 
-		// --- ENUM DETECTION (robust)
+		// --- ENUM DETECTION + kind
 		let enumAttach = ''
 		let kind = guessFieldType(rowTText)
 
-		// 1) try full Database['public']['Enums']['X'] extraction
-		let enumName = extractEnumName(rowTText)
-
-		// 2) fallback: scan for any known enum name token in the text
-		if (!enumName) {
-			for (const knownName of Object.keys(enumMap)) {
-				const token = new RegExp(`\\b${knownName}\\b`)
-				if (token.test(rowTText)) {
-					enumName = knownName
-					break
-				}
-			}
-		}
-
+		// essaie de trouver l’enum à travers les unions et l’apparent type
+		const enumName = findEnumInType(rowT, sf, enumMap)
 		if (enumName && enumMap[enumName]) {
 			enumAttach = `, enum: Enums.${enumMap[enumName].pascal}Values`
-			kind = 'enum' // force enum kind
+			kind = 'enum' // force enum
 		}
 
 		// pk/readonly heuristics
 		const pk = name === 'id'
 		const readonly = pk || name === 'created_at' || name === 'inserted_at' || name === 'updated_at'
 
-		// relation (if any)
+		// relation (si présente)
 		const rel = relationsByColumn[name]
 			? `, relation: { table: '${relationsByColumn[name].table}', column: '${relationsByColumn[name].column}', fk: '${relationsByColumn[name].fk}' }`
 			: ``
