@@ -4,13 +4,15 @@ const { execSync } = require('node:child_process')
 const path = require('path')
 
 const commands = {
-	'clear': path.resolve(__dirname, '../scripts/clear.js'),
-	'generate:types': path.resolve(__dirname, '../scripts/generate-types.js'),
-	'generate:schemas': path.resolve(__dirname, '../scripts/generate-schemas.js'),
-	'generate:models': path.resolve(__dirname, '../scripts/generate-models.js'),
-	'generate:stores': path.resolve(__dirname, '../scripts/generate-stores.js'),
+	'clear': 			path.resolve(__dirname, '../scripts/clear.js'),
+	'generate:types': 	path.resolve(__dirname, '../scripts/generate-types.js'),
+	'generate:enums': 	path.resolve(__dirname, '../scripts/generate-enums.js'),
+	'generate:schemas':	path.resolve(__dirname, '../scripts/generate-schemas.js'),
+	'generate:models': 	path.resolve(__dirname, '../scripts/generate-models.js'),
+	'generate:stores': 	path.resolve(__dirname, '../scripts/generate-stores.js'),
 	'generate:all': [
 		path.resolve(__dirname, '../scripts/generate-types.js'),
+		path.resolve(__dirname, '../scripts/generate-enums.js'),
 		path.resolve(__dirname, '../scripts/generate-schemas.js'),
 		path.resolve(__dirname, '../scripts/generate-models.js'),
 		path.resolve(__dirname, '../scripts/generate-stores.js'),
