@@ -21,9 +21,15 @@ let db
 try { db = sf.getTypeAliasOrThrow('Database') }
 catch { console.error('❌ Type alias "Database" not found'); process.exit(1) }
 
+const toPascal = (s) =>
+	String(s)
+		.replace(/[_\-./\s]+/g, ' ')
+		.trim()
+		.replace(/(^|\s)([a-zA-Z])/g, (_, __, c) => c.toUpperCase())
+		.replace(/\s+/g, '')
+
 const extractEnumName = (typeText) => {
-	// make it robust to single/double quotes and case, e.g. Database["public"]["Enums"]["STATUS"]
-	// or Database['public']['Enums']['status']
+	// robust to quotes/spacing/case
 	const re = /Database\[\s*['"]public['"]\s*\]\s*\[\s*['"]Enums['"]\s*\]\s*\[\s*['"]([^'"]+)['"]\s*\]/i
 	const m = String(typeText).match(re)
 	return m?.[1] || null
@@ -53,7 +59,7 @@ const guessFieldType = (tStr) => {
 	if (t.includes('json')) return 'json'
 	if (t.includes('string') || t.includes('text') || t.includes('varchar') || t.includes('char')) return 'string'
 	return 'unknown'
-}
+}	
 
 const readTpl = () => fs.readFileSync(tplPath, 'utf8')
 const linesBarrel = []
@@ -119,23 +125,35 @@ for (const prop of tablesType.getProperties()) {
 		const insertProp = insertType.getProperty(name)
 		let required = true
 		if (!insertProp) {
-			// if it's absent in Insert, it's likely auto/readonly (id/created_at)
-			required = false
+			required = false // usually auto/readonly (id/created_at)
 		} else {
 			const d = insertProp.getDeclarations()?.[0]
 			const isOptional = d?.hasQuestionToken?.() ?? false
 			required = !isOptional
 		}
 
-		// detect enum
+		// --- ENUM DETECTION (robust)
 		let enumAttach = ''
-		const enumName = extractEnumName(rowTText)
-		if (enumName && enumMap[enumName]) {
-			enumAttach = `, enum: Enums.${enumMap[enumName].pascal}Values`
+		let kind = guessFieldType(rowTText)
+
+		// 1) try full Database['public']['Enums']['X'] extraction
+		let enumName = extractEnumName(rowTText)
+
+		// 2) fallback: scan for any known enum name token in the text
+		if (!enumName) {
+			for (const knownName of Object.keys(enumMap)) {
+				const token = new RegExp(`\\b${knownName}\\b`)
+				if (token.test(rowTText)) {
+					enumName = knownName
+					break
+				}
+			}
 		}
 
-		// type guess
-		const kind = guessFieldType(rowTText)
+		if (enumName && enumMap[enumName]) {
+			enumAttach = `, enum: Enums.${enumMap[enumName].pascal}Values`
+			kind = 'enum' // force enum kind
+		}
 
 		// pk/readonly heuristics
 		const pk = name === 'id'
@@ -150,6 +168,7 @@ for (const prop of tablesType.getProperties()) {
 			`\t${name}: { type: '${kind}', required: ${required}${pk ? ', pk: true' : ''}${readonly ? ', readonly: true' : ''}${enumAttach}${rel} },`
 		)
 	}
+
 
 	let code = readTpl()
 	code = code
