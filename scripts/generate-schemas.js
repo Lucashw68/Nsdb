@@ -1,197 +1,297 @@
 #!/usr/bin/env node
+/**
+ * Generate NSDB Schemas from Supabase types
+ * - Reads:  types/database.types.ts
+ * - Emits:  nsdb/schemas/<table>.ts + nsdb/schemas/index.ts
+ * - Uses:   templates/schema.template.ts
+ *
+ * Responsibilities are split per function:
+ *  - validateEnvironment
+ *  - loadProject
+ *  - getDatabaseTypeAlias
+ *  - getPublicSchemaTypes
+ *  - buildEnumMap
+ *  - parseRelationships
+ *  - detectFieldRequired
+ *  - guessFieldKind
+ *  - extractEnumNameFromTypeText
+ *  - findEnumInType
+ *  - buildSchemaForTable
+ *  - renderSchemaFromTemplate
+ *  - writeSchemaFile
+ *  - writeBarrel
+ *  - main
+ */
+
 import fs from 'fs'
 import path from 'path'
 import { Project } from 'ts-morph'
 import { fileURLToPath } from 'url'
+import { toPascal } from './helpers/names.js'
 
-const cwd = process.cwd()
-const typesPath = path.resolve(cwd, 'types/database.types.ts')
-const outDir = path.resolve(cwd, 'nsdb/schemas')
-const barrel = path.join(outDir, 'index.ts')
-const tplPath = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/schema.template.ts')
+/* ------------------------- paths & constants ------------------------- */
 
-if (!fs.existsSync(typesPath)) { console.error(`❌ Missing ${typesPath}`); process.exit(1) }
-if (!fs.existsSync(tplPath)) { console.error(`❌ Missing template ${tplPath}`); process.exit(1) }
-fs.mkdirSync(outDir, { recursive: true })
+const currentWorkingDirectory = process.cwd()
+const typesFilePath = path.resolve(currentWorkingDirectory, 'types/database.types.ts')
+const outputDirectory = path.resolve(currentWorkingDirectory, 'nsdb/schemas')
+const barrelFilePath = path.join(outputDirectory, 'index.ts')
+const templateFilePath = path.resolve(currentWorkingDirectory, 'node_modules/@lucashw68/nsdb/templates/schema.template.ts')
 
-const project = new Project({ skipAddingFilesFromTsConfig: true })
-const sf = project.addSourceFileAtPath(typesPath)
+/* ------------------------------ helpers ------------------------------ */
 
-let db
-try { db = sf.getTypeAliasOrThrow('Database') }
-catch { console.error('❌ Type alias "Database" not found'); process.exit(1) }
-
-const toPascal = (s) =>
-	String(s)
-		.replace(/[_\-./\s]+/g, ' ')
-		.trim()
-		.replace(/(^|\s)([a-zA-Z])/g, (_, __, c) => c.toUpperCase())
-		.replace(/\s+/g, '')
-
-const extractEnumName = (typeText) => {
-	// robust to quotes/spacing/case
-	const re = /Database\[\s*['"]public['"]\s*\]\s*\[\s*['"]Enums['"]\s*\]\s*\[\s*['"]([^'"]+)['"]\s*\]/i
-	const m = String(typeText).match(re)
-	return m?.[1] || null
+function validateEnvironment() {
+	if (!fs.existsSync(typesFilePath)) {
+		console.error(`❌ Missing types file: ${typesFilePath}`)
+		process.exit(1)
+	}
+	if (!fs.existsSync(templateFilePath)) {
+		console.error(`❌ Missing template: ${templateFilePath}`)
+		process.exit(1)
+	}
+	fs.mkdirSync(outputDirectory, { recursive: true })
 }
 
-const guessFieldType = (tStr) => {
-	const t = String(tStr).toLowerCase().replace(/"/g, "'")
-	if (t.includes("database['public']['enums']")) return 'enum'
-	if (t.includes('uuid')) return 'uuid'
-	if (t.includes('timestamp') || t.includes('date')) return 'timestamp'
-	if (t.includes('boolean') || t.includes('bool')) return 'boolean'
-	if (t.includes('number') || t.includes('int') || t.includes('numeric') || t.includes('float') || t.includes('double')) return 'number'
-	if (t.includes('json')) return 'json'
-	if (t.includes('string') || t.includes('text') || t.includes('varchar') || t.includes('char')) return 'string'
+function loadProject() {
+	return new Project({ skipAddingFilesFromTsConfig: true })
+}
+
+function getDatabaseTypeAlias(project) {
+	const sourceFile = project.addSourceFileAtPath(typesFilePath)
+	try {
+		return sourceFile.getTypeAliasOrThrow('Database')
+	} catch {
+		console.error('❌ Type alias "Database" not found in types/database.types.ts')
+		process.exit(1)
+	}
+}
+
+function getPublicSchemaTypes(databaseAlias) {
+	const dbType = databaseAlias.getType()
+	const publicSchema = dbType.getProperty('public')?.getTypeAtLocation(databaseAlias)
+	if (!publicSchema) {
+		console.error(`❌ Can't resolve Database["public"]`)
+		process.exit(1)
+	}
+	const tables = publicSchema.getProperty('Tables')?.getTypeAtLocation(databaseAlias)
+	if (!tables) {
+		console.error(`❌ Can't resolve Database["public"]["Tables"]`)
+		process.exit(1)
+	}
+	const enums = publicSchema.getProperty('Enums')?.getTypeAtLocation(databaseAlias) || null
+	return { tables, enums }
+}
+
+function buildEnumMap(enumsType) {
+	// enumName -> { pascal }
+	const map = {}
+	if (!enumsType) return map
+	for (const property of enumsType.getProperties()) {
+		const enumName = property.getName()
+		map[enumName] = { pascal: toPascal(enumName) }
+	}
+	return map
+}
+
+function parseArrayTypeTextLiteralToArray(text) {
+	// expects a literal like: ["profile_id"] or ["id"]
+	// returns ['profile_id'] or null
+	const matches = String(text || '').match(/\["([^"]*)"\]/g) || []
+	const values = []
+	for (const segment of matches) {
+		const found = segment.match(/\["([^"]*)"\]/)?.[1]
+		if (found) values.push(found)
+	}
+	return values.length ? values : null
+}
+
+function parseRelationships(tableType, typeLocationNode) {
+	// Returns a map by column: colName -> { table, column, fk }
+	const relationshipsProperty = tableType.getProperty('Relationships')
+	if (!relationshipsProperty) return {}
+
+	const relationshipsType = relationshipsProperty.getTypeAtLocation(typeLocationNode)
+	const arrayMembers = relationshipsType.isArray()
+		? [relationshipsType.getArrayElementTypeOrThrow()]
+		: relationshipsType.isUnion()
+			? relationshipsType.getUnionTypes()
+			: []
+
+	const mapByColumn = {}
+
+	for (const member of arrayMembers) {
+		const foreignKeyName = member.getProperty('foreignKeyName')?.getTypeAtLocation(typeLocationNode).getLiteralValue?.()
+		const columnsText = member.getProperty('columns')?.getTypeAtLocation(typeLocationNode).getText()
+		const referencedRelation = member.getProperty('referencedRelation')?.getTypeAtLocation(typeLocationNode).getLiteralValue?.()
+		const referencedColumnsText = member.getProperty('referencedColumns')?.getTypeAtLocation(typeLocationNode).getText()
+
+		const columns = parseArrayTypeTextLiteralToArray(columnsText) || []
+		const referencedColumns = parseArrayTypeTextLiteralToArray(referencedColumnsText) || ['id']
+
+		for (const column of columns) {
+			mapByColumn[column] = {
+				table: referencedRelation || null,
+				column: referencedColumns[0] || 'id',
+				fk: foreignKeyName || null
+			}
+		}
+	}
+
+	return mapByColumn
+}
+
+function detectFieldRequired(insertType, fieldName) {
+	// Required if appears in Insert without question token
+	const insertProperty = insertType.getProperty(fieldName)
+	if (!insertProperty) return false // often auto/readonly such as id, created_at
+	const declaration = insertProperty.getDeclarations()?.[0]
+	const isOptional = declaration?.hasQuestionToken?.() ?? false
+	return !isOptional
+}
+
+function guessFieldKind(typeText) {
+	const normalized = String(typeText).toLowerCase().replace(/"/g, "'")
+	if (normalized.includes("database['public']['enums']")) return 'enum'
+	if (normalized.includes('uuid')) return 'uuid'
+	if (normalized.includes('timestamp') || normalized.includes('date')) return 'timestamp'
+	if (normalized.includes('boolean') || normalized.includes('bool')) return 'boolean'
+	if (normalized.includes('number') || normalized.includes('int') || normalized.includes('numeric') || normalized.includes('float') || normalized.includes('double')) return 'number'
+	if (normalized.includes('json')) return 'json'
+	if (normalized.includes('string') || normalized.includes('text') || normalized.includes('varchar') || normalized.includes('char')) return 'string'
 	return 'unknown'
 }
 
-// NEW: find enum name across unions/apparent type
-const findEnumInType = (tsType, sf, enumMap) => {
+function extractEnumNameFromTypeText(typeText) {
+	// robust to quotes/spacing/case: Database["public"]["Enums"]["PROVIDERS"]
+	const enumPattern = /Database\[\s*['"]public['"]\s*\]\s*\[\s*['"]Enums['"]\s*\]\s*\[\s*['"]([^'"]+)['"]\s*\]/i
+	const match = String(typeText).match(enumPattern)
+	return match?.[1] || null
+}
+
+function findEnumInType(tsType, typeLocationNode, enumMap) {
 	const candidates = tsType.isUnion() ? tsType.getUnionTypes() : [tsType]
-	for (const c of candidates) {
-		const texts = [
-			c.getText(),
-			c.getApparentType().getText?.() ?? ''
+	for (const candidate of candidates) {
+		const textsToCheck = [
+			candidate.getText(),
+			candidate.getApparentType().getText?.() ?? ''
 		]
-		for (const txt of texts) {
-			// 1) full Database['public']['Enums']['X'] match
-			const full = extractEnumName(txt)
-			if (full && enumMap[full]) return full
-			// 2) fallback: look for known enum token
-			for (const knownName of Object.keys(enumMap)) {
-				const token = new RegExp(`\\b${knownName}\\b`)
-				if (token.test(String(txt))) return knownName
+		for (const text of textsToCheck) {
+			const fullMatch = extractEnumNameFromTypeText(text)
+			if (fullMatch && enumMap[fullMatch]) return fullMatch
+			for (const knownEnumName of Object.keys(enumMap)) {
+				const token = new RegExp(`\\b${knownEnumName}\\b`)
+				if (token.test(String(text))) return knownEnumName
 			}
 		}
 	}
 	return null
 }
 
-const publicType = db.getType().getProperty('public')?.getTypeAtLocation(sf)
-const tablesType = publicType?.getProperty('Tables')?.getTypeAtLocation(sf)
-const enumsType = publicType?.getProperty('Enums')?.getTypeAtLocation(sf)
-if (!tablesType) { console.error('❌ Database["public"]["Tables"] not found'); process.exit(1) }
+function buildSchemaForTable(tableProperty, sourceFile, enumMap) {
+	const tableName = tableProperty.getName()
+	const pascalTableName = toPascal(tableName)
+	const rowTypeAlias = `${pascalTableName}Row`
 
-const enumMap = {} // enumName -> Pascal + values exist? (for name resolution)
-if (enumsType) {
-	for (const e of enumsType.getProperties()) {
-		const name = e.getName()
-		const pascal = name.replace(/(^|[_-]\w)/g, m => m.replace(/[_-]/,'').toUpperCase())
-		enumMap[name] = { pascal }
-	}
-}
+	const tableType = tableProperty.getTypeAtLocation(sourceFile)
+	const rowProperty = tableType.getProperty('Row')
+	const insertProperty = tableType.getProperty('Insert')
 
-const readTpl = () => fs.readFileSync(tplPath, 'utf8')
-const linesBarrel = []
-
-for (const prop of tablesType.getProperties()) {
-	const table = prop.getName()
-	const pascal = table.replace(/(^|[_-]\w)/g, m => m.replace(/[_-]/,'').toUpperCase())
-	const rowName = `${pascal}Row`
-
-	const tableType = prop.getTypeAtLocation(sf)
-	const rowProp = tableType.getProperty('Row')
-	const insProp = tableType.getProperty('Insert')
-	const relProp = tableType.getProperty('Relationships')
-
-	if (!rowProp || !insProp) continue
-
-	const rowType = rowProp.getTypeAtLocation(sf)
-	const insertType = insProp.getTypeAtLocation(sf)
-
-	// relationships: array of literal objects; we’ll build a per-column map
-	let relationsByColumn = {}
-	if (relProp) {
-		const relType = relProp.getTypeAtLocation(sf)
-		const arrTypes = relType.isArray() ? [relType.getArrayElementTypeOrThrow()] : relType.isUnion() ? relType.getUnionTypes() : []
-		for (const t of arrTypes) {
-			// we expect properties like 'foreignKeyName', 'columns', 'referencedRelation', 'referencedColumns'
-			const fkName = t.getProperty('foreignKeyName')?.getTypeAtLocation(sf).getLiteralValue?.()
-			const cols = t.getProperty('columns')?.getTypeAtLocation(sf).getText() // like '["profile_id"]'
-			const refRel = t.getProperty('referencedRelation')?.getTypeAtLocation(sf).getLiteralValue?.()
-			const refCols = t.getProperty('referencedColumns')?.getTypeAtLocation(sf).getText()
-
-			// quick parse arrays from type text when literals
-			const parseArr = (txt) => {
-				const m = String(txt || '').match(/\["([^"]*)"\]/g) || []
-				const out = []
-				for (const seg of m) {
-					const s = seg.match(/\["([^"]*)"\]/)?.[1]
-					if (s) out.push(s)
-				}
-				return out.length ? out : null
-			}
-			const colList = parseArr(cols) || []
-			const refColList = parseArr(refCols) || ['id']
-
-			for (const c of colList) {
-				relationsByColumn[c] = {
-					table: refRel || null,
-					column: refColList[0] || 'id',
-					fk: fkName || null
-				}
-			}
-		}
+	if (!rowProperty || !insertProperty) {
+		return { tableName, pascalTableName, rowTypeAlias, fields: [], relationshipsByColumn: {} }
 	}
 
-	const schemaFields = []
+	const rowType = rowProperty.getTypeAtLocation(sourceFile)
+	const insertType = insertProperty.getTypeAtLocation(sourceFile)
+	const relationshipsByColumn = parseRelationships(tableType, sourceFile)
 
-	for (const p of rowType.getProperties()) {
-		const name = p.getName()
-		const rowT = p.getTypeAtLocation(sf)
-		const rowTText = rowT.getText()
+	const fields = []
 
-		// required? depuis l’optionalité dans Insert
-		const insertProp = insertType.getProperty(name)
-		let required = true
-		if (!insertProp) {
-			required = false // souvent auto/readonly (id/created_at)
-		} else {
-			const d = insertProp.getDeclarations()?.[0]
-			const isOptional = d?.hasQuestionToken?.() ?? false
-			required = !isOptional
-		}
+	for (const rowField of rowType.getProperties()) {
+		const fieldName = rowField.getName()
+		const fieldTsType = rowField.getTypeAtLocation(sourceFile)
+		const fieldTypeText = fieldTsType.getText()
 
-		// --- ENUM DETECTION + kind
-		let enumAttach = ''
-		let kind = guessFieldType(rowTText)
+		const required = detectFieldRequired(insertType, fieldName)
 
-		// essaie de trouver l’enum à travers les unions et l’apparent type
-		const enumName = findEnumInType(rowT, sf, enumMap)
+		// enum detection + kind forcing
+		let fieldKind = guessFieldKind(fieldTypeText)
+		let enumAttachment = ''
+		const enumName = findEnumInType(fieldTsType, sourceFile, enumMap)
 		if (enumName && enumMap[enumName]) {
-			enumAttach = `, enum: Enums.${enumMap[enumName].pascal}Values`
-			kind = 'enum' // force enum
+			fieldKind = 'enum'
+			enumAttachment = `, enum: Enums.${enumMap[enumName].pascal}Values`
 		}
 
-		// pk/readonly heuristics
-		const pk = name === 'id'
-		const readonly = pk || name === 'created_at' || name === 'inserted_at' || name === 'updated_at'
+		const isPrimaryKey = fieldName === 'id'
+		const isReadonly = isPrimaryKey || fieldName === 'created_at' || fieldName === 'inserted_at' || fieldName === 'updated_at'
 
-		// relation (si présente)
-		const rel = relationsByColumn[name]
-			? `, relation: { table: '${relationsByColumn[name].table}', column: '${relationsByColumn[name].column}', fk: '${relationsByColumn[name].fk}' }`
+		const relation = relationshipsByColumn[fieldName]
+			? `, relation: { table: '${relationshipsByColumn[fieldName].table}', column: '${relationshipsByColumn[fieldName].column}', fk: '${relationshipsByColumn[fieldName].fk}' }`
 			: ``
 
-		schemaFields.push(
-			`\t${name}: { type: '${kind}', required: ${required}${pk ? ', pk: true' : ''}${readonly ? ', readonly: true' : ''}${enumAttach}${rel} },`
+		fields.push(
+			`\t${fieldName}: { type: '${fieldKind}', required: ${required}${isPrimaryKey ? ', pk: true' : ''}${isReadonly ? ', readonly: true' : ''}${enumAttachment}${relation} },`
 		)
 	}
 
-
-	let code = readTpl()
-	code = code
-		.replace(/__TABLE__/g, table)
-		.replace(/__PASCAL__/g, pascal)
-		.replace(/__ROW__/g, rowName)
-		.replace('// __FIELDS__', schemaFields.join('\n'))
-
-	const outFile = path.join(outDir, `${table}.ts`)
-	fs.writeFileSync(outFile, code, 'utf8')
-	linesBarrel.push(`export * from './${path.basename(outFile, '.ts')}' // ${pascal}Schema`)
-	console.log('✅ schema:', path.relative(cwd, outFile))
+	return { tableName, pascalTableName, rowTypeAlias, fields, relationshipsByColumn }
 }
 
-fs.writeFileSync(barrel, linesBarrel.join('\n') + '\n', 'utf8')
-console.log('✅ schemas barrel:', path.relative(cwd, barrel))
+function renderSchemaFromTemplate(templateContent, tableName, pascalTableName, rowTypeAlias, fieldsLines) {
+	return templateContent
+		.replace(/__TABLE__/g, tableName)
+		.replace(/__PASCAL__/g, pascalTableName)
+		.replace(/__ROW__/g, rowTypeAlias)
+		.replace('// __FIELDS__', fieldsLines.join('\n'))
+}
+
+function writeSchemaFile(tableName, renderedCode) {
+	const schemaFilePath = path.join(outputDirectory, `${tableName}.ts`)
+	fs.writeFileSync(schemaFilePath, renderedCode, 'utf8')
+	console.log('✅ schema:', path.relative(currentWorkingDirectory, schemaFilePath))
+	return schemaFilePath
+}
+
+function writeBarrel(exportedFiles) {
+	const lines = exportedFiles.map(({ filePath, pascalTableName }) => {
+		const base = path.basename(filePath, '.ts')
+		return `export * from './${base}' // ${pascalTableName}Schema`
+	})
+	fs.writeFileSync(barrelFilePath, lines.join('\n') + '\n', 'utf8')
+	console.log('✅ schemas barrel:', path.relative(currentWorkingDirectory, barrelFilePath))
+}
+
+/* --------------------------------- main -------------------------------- */
+
+function main() {
+	validateEnvironment()
+
+	const project = loadProject()
+	const databaseAlias = getDatabaseTypeAlias(project)
+	const { tables: tablesType, enums: enumsType } = getPublicSchemaTypes(databaseAlias)
+	const enumMap = buildEnumMap(enumsType)
+
+	const templateContent = fs.readFileSync(templateFilePath, 'utf8')
+	const exportsForBarrel = []
+
+	for (const tableProperty of tablesType.getProperties()) {
+		const schema = buildSchemaForTable(tableProperty, databaseAlias, enumMap)
+		if (!schema.fields.length) continue
+
+		const code = renderSchemaFromTemplate(
+			templateContent,
+			schema.tableName,
+			schema.pascalTableName,
+			schema.rowTypeAlias,
+			schema.fields
+		)
+
+		const filePath = writeSchemaFile(schema.tableName, code)
+		exportsForBarrel.push({ filePath, pascalTableName: schema.pascalTableName })
+	}
+
+	writeBarrel(exportsForBarrel)
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+	main()
+}
