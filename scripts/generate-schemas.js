@@ -1,62 +1,72 @@
 #!/usr/bin/env node
 /**
  * Generate NSDB Schemas from Supabase types
- * - Reads:  types/database.types.ts
- * - Emits:  nsdb/schemas/<table>.ts + nsdb/schemas/index.ts
- * - Uses:   templates/schema.template.ts
  *
- * Responsibilities are split per function:
- *  - validateEnvironment
- *  - loadProject
- *  - getDatabaseTypeAlias
- *  - getPublicSchemaTypes
- *  - buildEnumMap
- *  - parseRelationships
- *  - detectFieldRequired
- *  - guessFieldKind
- *  - extractEnumNameFromTypeText
- *  - findEnumInType
- *  - buildSchemaForTable
- *  - renderSchemaFromTemplate
- *  - writeSchemaFile
- *  - writeBarrel
- *  - main
+ * This generator:
+ *  - Reads Supabase types from:     types/database.types.ts
+ *  - Emits per-table schemas to:    nsdb/schemas/<table>.ts
+ *  - Emits a barrel file:           nsdb/schemas/index.ts
+ *  - Uses a template:               node_modules/@lucashw68/nsdb/templates/schema.template.ts
+ *
+ * Design goals:
+ *  - Single-responsibility functions
+ *  - No cryptic abbreviations for variables
+ *  - Robust, simple enum detection (regex on Database["public"]["Enums"]["X"])
+ *  - Clear logs and early failure when prerequisites are missing
  */
 
 import fs from 'fs'
 import path from 'path'
 import { Project } from 'ts-morph'
-import { fileURLToPath } from 'url'
 import { toPascal } from '../helpers/names.js'
 
-/* ------------------------- paths & constants ------------------------- */
+/* -------------------------------------------------------------------------- */
+/* Paths & Constants                                                           */
+/* -------------------------------------------------------------------------- */
 
 const currentWorkingDirectory = process.cwd()
-const typesFilePath = path.resolve(currentWorkingDirectory, 'types/database.types.ts')
-const outputDirectory = path.resolve(currentWorkingDirectory, 'nsdb/schemas')
-const barrelFilePath = path.join(outputDirectory, 'index.ts')
-const templateFilePath = path.resolve(currentWorkingDirectory, 'node_modules/@lucashw68/nsdb/templates/schema.template.ts')
+const typesFileAbsolutePath = path.resolve(currentWorkingDirectory, 'types/database.types.ts')
+const outputDirectoryAbsolutePath = path.resolve(currentWorkingDirectory, 'nsdb/schemas')
+const barrelFileAbsolutePath = path.join(outputDirectoryAbsolutePath, 'index.ts')
+const templateFileAbsolutePath = path.resolve(
+	currentWorkingDirectory,
+	'node_modules/@lucashw68/nsdb/templates/schema.template.ts'
+)
 
-/* ------------------------------ helpers ------------------------------ */
+/* -------------------------------------------------------------------------- */
+/* Environment & Project Loading                                               */
+/* -------------------------------------------------------------------------- */
 
+/**
+ * Ensures required files exist and prepares the output directory.
+ * Exits the process with code 1 if a prerequisite is missing.
+ */
 function validateEnvironment() {
-	if (!fs.existsSync(typesFilePath)) {
-		console.error(`❌ Missing types file: ${typesFilePath}`)
+	if (!fs.existsSync(typesFileAbsolutePath)) {
+		console.error(`❌ Missing types file: ${typesFileAbsolutePath}`)
 		process.exit(1)
 	}
-	if (!fs.existsSync(templateFilePath)) {
-		console.error(`❌ Missing template: ${templateFilePath}`)
+	if (!fs.existsSync(templateFileAbsolutePath)) {
+		console.error(`❌ Missing template: ${templateFileAbsolutePath}`)
 		process.exit(1)
 	}
-	fs.mkdirSync(outputDirectory, { recursive: true })
+	fs.mkdirSync(outputDirectoryAbsolutePath, { recursive: true })
 }
 
-function loadProject() {
+/**
+ * Creates a lightweight ts-morph project (we do not load tsconfig or add all files).
+ */
+function createTypeScriptProject() {
 	return new Project({ skipAddingFilesFromTsConfig: true })
 }
 
-function getDatabaseTypeAlias(project) {
-	const sourceFile = project.addSourceFileAtPath(typesFilePath)
+/**
+ * Loads the "Database" type alias from the Supabase types file.
+ * @param {Project} project
+ * @returns {import('ts-morph').TypeAliasDeclaration}
+ */
+function loadDatabaseTypeAlias(project) {
+	const sourceFile = project.addSourceFileAtPath(typesFileAbsolutePath)
 	try {
 		return sourceFile.getTypeAliasOrThrow('Database')
 	} catch {
@@ -65,52 +75,93 @@ function getDatabaseTypeAlias(project) {
 	}
 }
 
-function getPublicSchemaTypes(databaseAlias) {
-	const dbType = databaseAlias.getType()
-	const publicSchema = dbType.getProperty('public')?.getTypeAtLocation(databaseAlias)
-	if (!publicSchema) {
-		console.error(`❌ Can't resolve Database["public"]`)
+/**
+ * From the "Database" alias, extracts the "public" schema types,
+ * then returns the "Tables" type (mandatory).
+ * @param {import('ts-morph').TypeAliasDeclaration} databaseAlias
+ */
+function getPublicTablesType(databaseAlias) {
+	const databaseType = databaseAlias.getType()
+	const publicSchemaType = databaseType.getProperty('public')?.getTypeAtLocation(databaseAlias)
+	if (!publicSchemaType) {
+		console.error('❌ Database["public"] not found.')
 		process.exit(1)
 	}
-	const tables = publicSchema.getProperty('Tables')?.getTypeAtLocation(databaseAlias)
-	if (!tables) {
-		console.error(`❌ Can't resolve Database["public"]["Tables"]`)
+	const tablesType = publicSchemaType.getProperty('Tables')?.getTypeAtLocation(databaseAlias)
+	if (!tablesType) {
+		console.error('❌ Database["public"]["Tables"] not found.')
 		process.exit(1)
 	}
-	const enums = publicSchema.getProperty('Enums')?.getTypeAtLocation(databaseAlias) || null
-	return { tables, enums }
+	return tablesType
 }
 
-function buildEnumMap(enumsType) {
-	// enumName -> { pascal }
-	const map = {}
-	if (!enumsType) return map
-	for (const property of enumsType.getProperties()) {
-		const enumName = property.getName()
-		map[enumName] = { pascal: toPascal(enumName) }
-	}
-	return map
+/* -------------------------------------------------------------------------- */
+/* Type Parsing Helpers                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Parses a TypeScript literal array type text into a string array.
+ * Example: '["profile_id"]' -> ['profile_id']
+ * @param {string} typeText
+ * @returns {string[]}
+ */
+function parseArrayLiteralFromTypeText(typeText) {
+	const matches = String(typeText || '').match(/\["([^"]*)"\]/g) || []
+	return matches
+		.map(segment => segment.match(/\["([^"]*)"\]/)?.[1])
+		.filter(Boolean)
 }
 
-function parseArrayTypeTextLiteralToArray(text) {
-	// expects a literal like: ["profile_id"] or ["id"]
-	// returns ['profile_id'] or null
-	const matches = String(text || '').match(/\["([^"]*)"\]/g) || []
-	const values = []
-	for (const segment of matches) {
-		const found = segment.match(/\["([^"]*)"\]/)?.[1]
-		if (found) values.push(found)
-	}
-	return values.length ? values : null
+/**
+ * Heuristic to guess the field kind for UI/validation meta.
+ * Uses the raw type text string (lowercased).
+ * @param {string} typeText
+ * @returns {'enum'|'uuid'|'timestamp'|'boolean'|'number'|'json'|'string'|'unknown'}
+ */
+function guessFieldKindFromTypeText(typeText) {
+	const normalized = String(typeText).toLowerCase()
+	if (normalized.includes('database["public"]["enums"]')) return 'enum'
+	if (normalized.includes('uuid')) return 'uuid'
+	if (normalized.includes('timestamp') || normalized.includes('date')) return 'timestamp'
+	if (normalized.includes('bool')) return 'boolean'
+	if (
+		normalized.includes('int') ||
+		normalized.includes('number') ||
+		normalized.includes('float') ||
+		normalized.includes('numeric')
+	) return 'number'
+	if (normalized.includes('json')) return 'json'
+	if (normalized.includes('string') || normalized.includes('text') || normalized.includes('char') || normalized.includes('varchar')) return 'string'
+	return 'unknown'
 }
 
-function parseRelationships(tableType, typeLocationNode) {
-	// Returns a map by column: colName -> { table, column, fk }
+/**
+ * Extracts the enum name from a type text that contains:
+ *   Database["public"]["Enums"]["YOUR_ENUM"]
+ * @param {string} typeText
+ * @returns {string|null}
+ */
+function extractEnumNameFromTypeText(typeText) {
+	const match = String(typeText).match(/Database\["public"\]\["Enums"\]\["([^"]+)"\]/)
+	return match?.[1] ?? null
+}
+
+/* -------------------------------------------------------------------------- */
+/* Relationship & Required Detection                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Builds a map of relationships by column for a table type.
+ * @param {import('ts-morph').Type} tableType
+ * @param {import('ts-morph').Node} locationNode
+ * @returns {Record<string, { table: string|null, column: string, fk: string|null }>}
+ */
+function buildRelationshipsByColumn(tableType, locationNode) {
 	const relationshipsProperty = tableType.getProperty('Relationships')
 	if (!relationshipsProperty) return {}
 
-	const relationshipsType = relationshipsProperty.getTypeAtLocation(typeLocationNode)
-	const arrayMembers = relationshipsType.isArray()
+	const relationshipsType = relationshipsProperty.getTypeAtLocation(locationNode)
+	const members = relationshipsType.isArray()
 		? [relationshipsType.getArrayElementTypeOrThrow()]
 		: relationshipsType.isUnion()
 			? relationshipsType.getUnionTypes()
@@ -118,19 +169,20 @@ function parseRelationships(tableType, typeLocationNode) {
 
 	const mapByColumn = {}
 
-	for (const member of arrayMembers) {
-		const foreignKeyName = member.getProperty('foreignKeyName')?.getTypeAtLocation(typeLocationNode).getLiteralValue?.()
-		const columnsText = member.getProperty('columns')?.getTypeAtLocation(typeLocationNode).getText()
-		const referencedRelation = member.getProperty('referencedRelation')?.getTypeAtLocation(typeLocationNode).getLiteralValue?.()
-		const referencedColumnsText = member.getProperty('referencedColumns')?.getTypeAtLocation(typeLocationNode).getText()
+	for (const member of members) {
+		const foreignKeyName = member.getProperty('foreignKeyName')?.getTypeAtLocation(locationNode).getLiteralValue?.()
+		const columnsText = member.getProperty('columns')?.getTypeAtLocation(locationNode).getText()
+		const referencedRelation = member.getProperty('referencedRelation')?.getTypeAtLocation(locationNode).getLiteralValue?.()
+		const referencedColumnsText = member.getProperty('referencedColumns')?.getTypeAtLocation(locationNode).getText()
 
-		const columns = parseArrayTypeTextLiteralToArray(columnsText) || []
-		const referencedColumns = parseArrayTypeTextLiteralToArray(referencedColumnsText) || ['id']
+		const columns = parseArrayLiteralFromTypeText(columnsText)
+		const referencedColumns = parseArrayLiteralFromTypeText(referencedColumnsText)
+		const primaryReferencedColumn = referencedColumns[0] || 'id'
 
-		for (const column of columns) {
-			mapByColumn[column] = {
+		for (const columnName of columns) {
+			mapByColumn[columnName] = {
 				table: referencedRelation || null,
-				column: referencedColumns[0] || 'id',
+				column: primaryReferencedColumn,
 				fk: foreignKeyName || null
 			}
 		}
@@ -139,157 +191,159 @@ function parseRelationships(tableType, typeLocationNode) {
 	return mapByColumn
 }
 
-function detectFieldRequired(insertType, fieldName) {
-	// Required if appears in Insert without question token
+/**
+ * Determines whether a field is required by checking the Insert type.
+ * If the field is missing from Insert, it is treated as not required (likely auto/readonly).
+ * @param {import('ts-morph').Type} insertType
+ * @param {string} fieldName
+ * @returns {boolean}
+ */
+function isFieldRequired(insertType, fieldName) {
 	const insertProperty = insertType.getProperty(fieldName)
-	if (!insertProperty) return false // often auto/readonly such as id, created_at
+	if (!insertProperty) return false
 	const declaration = insertProperty.getDeclarations()?.[0]
 	const isOptional = declaration?.hasQuestionToken?.() ?? false
 	return !isOptional
 }
 
-function guessFieldKind(typeText) {
-	const normalized = String(typeText).toLowerCase().replace(/"/g, "'")
-	if (normalized.includes("database['public']['enums']")) return 'enum'
-	if (normalized.includes('uuid')) return 'uuid'
-	if (normalized.includes('timestamp') || normalized.includes('date')) return 'timestamp'
-	if (normalized.includes('boolean') || normalized.includes('bool')) return 'boolean'
-	if (normalized.includes('number') || normalized.includes('int') || normalized.includes('numeric') || normalized.includes('float') || normalized.includes('double')) return 'number'
-	if (normalized.includes('json')) return 'json'
-	if (normalized.includes('string') || normalized.includes('text') || normalized.includes('varchar') || normalized.includes('char')) return 'string'
-	return 'unknown'
-}
+/* -------------------------------------------------------------------------- */
+/* Schema Construction                                                         */
+/* -------------------------------------------------------------------------- */
 
-function extractEnumNameFromTypeText(typeText) {
-	// robust to quotes/spacing/case: Database["public"]["Enums"]["PROVIDERS"]
-	const enumPattern = /Database\[\s*['"]public['"]\s*\]\s*\[\s*['"]Enums['"]\s*\]\s*\[\s*['"]([^'"]+)['"]\s*\]/i
-	const match = String(typeText).match(enumPattern)
-	return match?.[1] || null
-}
-
-function findEnumInType(tsType, typeLocationNode, enumMap) {
-	const candidates = tsType.isUnion() ? tsType.getUnionTypes() : [tsType]
-	for (const candidate of candidates) {
-		const textsToCheck = [
-			candidate.getText(),
-			candidate.getApparentType().getText?.() ?? ''
-		]
-		for (const text of textsToCheck) {
-			const fullMatch = extractEnumNameFromTypeText(text)
-			if (fullMatch && enumMap[fullMatch]) return fullMatch
-			for (const knownEnumName of Object.keys(enumMap)) {
-				const token = new RegExp(`\\b${knownEnumName}\\b`)
-				if (token.test(String(text))) return knownEnumName
-			}
-		}
-	}
-	return null
-}
-
-function buildSchemaForTable(tableProperty, sourceFile, enumMap) {
+/**
+ * Builds the schema (fields metadata) for a given table property.
+ * @param {import('ts-morph').Symbol} tableProperty
+ * @param {import('ts-morph').Node} locationNode
+ */
+function buildSchemaForTable(tableProperty, locationNode) {
 	const tableName = tableProperty.getName()
 	const pascalTableName = toPascal(tableName)
-	const rowTypeAlias = `${pascalTableName}Row`
+	const rowTypeAliasName = `${pascalTableName}Row`
 
-	const tableType = tableProperty.getTypeAtLocation(sourceFile)
+	const tableType = tableProperty.getTypeAtLocation(locationNode)
 	const rowProperty = tableType.getProperty('Row')
 	const insertProperty = tableType.getProperty('Insert')
 
-	if (!rowProperty || !insertProperty) {
-		return { tableName, pascalTableName, rowTypeAlias, fields: [], relationshipsByColumn: {} }
-	}
+	if (!rowProperty || !insertProperty) return null
 
-	const rowType = rowProperty.getTypeAtLocation(sourceFile)
-	const insertType = insertProperty.getTypeAtLocation(sourceFile)
-	const relationshipsByColumn = parseRelationships(tableType, sourceFile)
+	const rowType = rowProperty.getTypeAtLocation(locationNode)
+	const insertType = insertProperty.getTypeAtLocation(locationNode)
+	const relationshipsByColumn = buildRelationshipsByColumn(tableType, locationNode)
 
-	const fields = []
+	const fieldLines = []
 
 	for (const rowField of rowType.getProperties()) {
 		const fieldName = rowField.getName()
-		const fieldTsType = rowField.getTypeAtLocation(sourceFile)
-		const fieldTypeText = fieldTsType.getText()
+		const fieldType = rowField.getTypeAtLocation(locationNode)
+		const fieldTypeText = fieldType.getText()
 
-		const required = detectFieldRequired(insertType, fieldName)
-
-		// enum detection + kind forcing
-		let fieldKind = guessFieldKind(fieldTypeText)
-		let enumAttachment = ''
-		const enumName = findEnumInType(fieldTsType, sourceFile, enumMap)
-		if (enumName && enumMap[enumName]) {
-			fieldKind = 'enum'
-			enumAttachment = `, enum: Enums.${enumMap[enumName].pascal}Values`
-		}
+		const required = isFieldRequired(insertType, fieldName)
+		const kind = guessFieldKindFromTypeText(fieldTypeText)
+		const enumName = extractEnumNameFromTypeText(fieldTypeText)
 
 		const isPrimaryKey = fieldName === 'id'
-		const isReadonly = isPrimaryKey || fieldName === 'created_at' || fieldName === 'inserted_at' || fieldName === 'updated_at'
+		const isReadonly =
+			isPrimaryKey ||
+			fieldName === 'created_at' ||
+			fieldName === 'updated_at' ||
+			fieldName === 'inserted_at'
 
-		const relation = relationshipsByColumn[fieldName]
+		const relationMeta = relationshipsByColumn[fieldName]
 			? `, relation: { table: '${relationshipsByColumn[fieldName].table}', column: '${relationshipsByColumn[fieldName].column}', fk: '${relationshipsByColumn[fieldName].fk}' }`
-			: ``
+			: ''
 
-		fields.push(
-			`\t${fieldName}: { type: '${fieldKind}', required: ${required}${isPrimaryKey ? ', pk: true' : ''}${isReadonly ? ', readonly: true' : ''}${enumAttachment}${relation} },`
+		const enumAttachment = enumName ? `, enum: Enums.${toPascal(enumName)}Values` : ''
+
+		fieldLines.push(
+			`\t${fieldName}: { type: '${kind}', required: ${required}${isPrimaryKey ? ', pk: true' : ''}${isReadonly ? ', readonly: true' : ''}${enumAttachment}${relationMeta} },`
 		)
 	}
 
-	return { tableName, pascalTableName, rowTypeAlias, fields, relationshipsByColumn }
+	return {
+		tableName,
+		pascalTableName,
+		rowTypeAliasName,
+		fieldLines
+	}
 }
 
-function renderSchemaFromTemplate(templateContent, tableName, pascalTableName, rowTypeAlias, fieldsLines) {
+/* -------------------------------------------------------------------------- */
+/* File Rendering & Writing                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Fills the schema template with computed values.
+ * @param {string} templateContent
+ * @param {string} tableName
+ * @param {string} pascalTableName
+ * @param {string} rowTypeAliasName
+ * @param {string[]} fieldLines
+ */
+function renderSchemaTemplate(templateContent, tableName, pascalTableName, rowTypeAliasName, fieldLines) {
 	return templateContent
 		.replace(/__TABLE__/g, tableName)
 		.replace(/__PASCAL__/g, pascalTableName)
-		.replace(/__ROW__/g, rowTypeAlias)
-		.replace('// __FIELDS__', fieldsLines.join('\n'))
+		.replace(/__ROW__/g, rowTypeAliasName)
+		.replace('// __FIELDS__', fieldLines.join('\n'))
 }
 
-function writeSchemaFile(tableName, renderedCode) {
-	const schemaFilePath = path.join(outputDirectory, `${tableName}.ts`)
-	fs.writeFileSync(schemaFilePath, renderedCode, 'utf8')
-	console.log('✅ schema:', path.relative(currentWorkingDirectory, schemaFilePath))
-	return schemaFilePath
+/**
+ * Writes a single schema file to disk.
+ * @param {string} tableName
+ * @param {string} code
+ * @returns {string} absolute file path
+ */
+function writeSchemaFile(tableName, code) {
+	const schemaFileAbsolutePath = path.join(outputDirectoryAbsolutePath, `${tableName}.ts`)
+	fs.writeFileSync(schemaFileAbsolutePath, code, 'utf8')
+	console.log('✅ schema:', path.relative(currentWorkingDirectory, schemaFileAbsolutePath))
+	return schemaFileAbsolutePath
 }
 
-function writeBarrel(exportedFiles) {
-	const lines = exportedFiles.map(({ filePath, pascalTableName }) => {
-		const base = path.basename(filePath, '.ts')
-		return `export * from './${base}' // ${pascalTableName}Schema`
+/**
+ * Writes the barrel file that re-exports all generated schemas.
+ * @param {{ fileAbsolutePath: string, pascalTableName: string }[]} exportedSchemas
+ */
+function writeBarrelFile(exportedSchemas) {
+	const lines = exportedSchemas.map(({ fileAbsolutePath, pascalTableName }) => {
+		const baseName = path.basename(fileAbsolutePath, '.ts')
+		return `export * from './${baseName}' // ${pascalTableName}Schema`
 	})
-	fs.writeFileSync(barrelFilePath, lines.join('\n') + '\n', 'utf8')
-	console.log('✅ schemas barrel:', path.relative(currentWorkingDirectory, barrelFilePath))
+	fs.writeFileSync(barrelFileAbsolutePath, lines.join('\n') + '\n', 'utf8')
+	console.log('✅ schemas barrel:', path.relative(currentWorkingDirectory, barrelFileAbsolutePath))
 }
 
-/* --------------------------------- main -------------------------------- */
+/* -------------------------------------------------------------------------- */
+/* Main                                                                        */
+/* -------------------------------------------------------------------------- */
 
 function main() {
 	validateEnvironment()
 
-	const project = loadProject()
-	const databaseAlias = getDatabaseTypeAlias(project)
-	const { tables: tablesType, enums: enumsType } = getPublicSchemaTypes(databaseAlias)
-	const enumMap = buildEnumMap(enumsType)
+	const project = createTypeScriptProject()
+	const databaseAlias = loadDatabaseTypeAlias(project)
+	const publicTablesType = getPublicTablesType(databaseAlias)
+	const templateContent = fs.readFileSync(templateFileAbsolutePath, 'utf8')
 
-	const templateContent = fs.readFileSync(templateFilePath, 'utf8')
-	const exportsForBarrel = []
+	const exportedSchemas = []
 
-	for (const tableProperty of tablesType.getProperties()) {
-		const schema = buildSchemaForTable(tableProperty, databaseAlias, enumMap)
-		if (!schema.fields.length) continue
+	for (const tableProperty of publicTablesType.getProperties()) {
+		const schema = buildSchemaForTable(tableProperty, databaseAlias)
+		if (!schema || !schema.fieldLines.length) continue
 
-		const code = renderSchemaFromTemplate(
+		const renderedCode = renderSchemaTemplate(
 			templateContent,
 			schema.tableName,
 			schema.pascalTableName,
-			schema.rowTypeAlias,
-			schema.fields
+			schema.rowTypeAliasName,
+			schema.fieldLines
 		)
 
-		const filePath = writeSchemaFile(schema.tableName, code)
-		exportsForBarrel.push({ filePath, pascalTableName: schema.pascalTableName })
+		const fileAbsolutePath = writeSchemaFile(schema.tableName, renderedCode)
+		exportedSchemas.push({ fileAbsolutePath, pascalTableName: schema.pascalTableName })
 	}
 
-	writeBarrel(exportsForBarrel)
+	writeBarrelFile(exportedSchemas)
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
