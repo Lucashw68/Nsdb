@@ -1,7 +1,6 @@
 // __IMPORTS__
 import type { Tables } from '~/types/database.types'
 import { computed } from 'vue'
-import { useSupabaseModel } from '#nsdb/composables/useSupabaseModel'
 import { __PASCAL__Schema } from '~/nsdb/schemas/__TABLE__'
 __STORE_IMPORT__
 
