@@ -111,10 +111,16 @@ function buildSchemaForTable(tableProperty, locationNode) {
 		const fieldName = rowField.getName()
 		const fieldType = rowField.getTypeAtLocation(locationNode)
 		const fieldTypeText = fieldType.getText()
+		const insertFieldTypeText = insertType
+			.getProperty(fieldName)
+			?.getTypeAtLocation(locationNode)
+			.getText()
 
 		const fieldIsRequired = isFieldRequired(insertType, fieldName)
 		let inferredKind = guessFieldKindFromTypeText(fieldTypeText)
-		const enumName = extractEnumNameFromTypeText(fieldTypeText)
+		const enumName =
+			extractEnumNameFromTypeText(fieldTypeText) ??
+			extractEnumNameFromTypeText(insertFieldTypeText)
 		if (enumName) inferredKind = 'enum'
 
 		const isPrimaryKey = fieldName === 'id'
