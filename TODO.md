@@ -9,6 +9,8 @@
 
 ## 10 November 2025
 
+- Simplify scripts
+- Add docs to all scripts
 - type mapping (e.g. mark required: true using Insert type nullability, detect FKs, enums, etc.)
 - Add components (forms, lists, details, etc.)
 - Abstract common models functions (empty from schema)
