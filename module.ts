@@ -1,5 +1,6 @@
 import {
 	defineNuxtModule,
+	addComponentsDir,
 	addImportsDir,
 	addTemplate,
 	createResolver,
@@ -13,7 +14,7 @@ export interface NsdbOptions {
 
 export default defineNuxtModule<NsdbOptions>({
 	meta: { name: '@lucashw68/nsdb', configKey: 'nsdb' },
-	defaults: { withStores: true },
+	defaults: { withComponents: true, componentsPrefix: 'Nsdb', withStores: true },
 
 	setup(options, nuxt) {
 		const rMod = createResolver(import.meta.url)
@@ -24,6 +25,15 @@ export default defineNuxtModule<NsdbOptions>({
 
 		// 1) Alias interne vers le runtime du module
 		nuxt.options.alias['#nsdb'] = runtimeDir
+
+		if (options.withComponents) {
+			addComponentsDir({
+				path: resolve(runtimeDir, 'components'),
+				prefix: options.componentsPrefix ?? 'Nsdb',
+				pathPrefix: false,
+				transpile: true,
+			})
+		}
 
 		// 2) Proxies de build pour les barrels d'app:
 		//    -> import { ... } from '#build/nsdb/models'
