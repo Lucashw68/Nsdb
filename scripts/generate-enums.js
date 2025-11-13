@@ -1,90 +1,98 @@
 #!/usr/bin/env node
 import path from 'path'
-import { exists } from '../helpers/io.js'
+import { exists, ensureDir, writeText } from '../helpers/io.js'
 import { parseArgs } from '../helpers/args.js'
-import { createTsProject, addSourceFile, loadDatabaseAlias, getPublicEnumsType } from '../helpers/ts.js'
-import { writeText, ensureDir } from '../helpers/io.js'
+import {
+	createTsProject,
+	addSourceFile,
+	loadDatabaseAlias,
+	getPublicEnumsType
+} from '../helpers/ts.js'
 import { toPascal } from '../helpers/names.js'
 
-function toPascalCase(s) {
-	return toPascal(s)
-}
-
+/**
+ * Build the metadata needed to emit strongly typed enums derived from Database["public"]["Enums"].
+ */
 function extractEnumDescriptors(sourceFile, enumsType) {
-	const properties = enumsType.getProperties()
-	return properties.map((prop) => {
-		const enumName = prop.getName()
-		const pascalName = toPascalCase(enumName)
-		const t = prop.getTypeAtLocation(sourceFile)
-		const union = t.isUnion() ? t.getUnionTypes() : []
-		const literals = union
-			.map(u => typeof u.getLiteralValue === 'function' ? u.getLiteralValue() : undefined)
-			.filter(v => typeof v === 'string')
-		return { enumName, pascalName, literalValues: literals }
+	const enumProperties = enumsType.getProperties()
+	return enumProperties.map((enumProperty) => {
+		const enumName = enumProperty.getName()
+		const pascalName = toPascal(enumName)
+		const enumType = enumProperty.getTypeAtLocation(sourceFile)
+		const unionMembers = enumType.isUnion() ? enumType.getUnionTypes() : []
+		const literalValues = unionMembers
+			.map((unionMember) => (
+				typeof unionMember.getLiteralValue === 'function'
+					? unionMember.getLiteralValue()
+					: undefined
+			))
+			.filter((literalValue) => typeof literalValue === 'string')
+
+		return { enumName, pascalName, literalValues }
 	})
 }
 
 function buildContent(databaseImportPath, descriptors) {
-	const header = [
+	const headerLines = [
 		`// ⚠️ auto-generated`,
 		`// Source: Database["public"]["Enums"]`,
 		`// ${new Date().toISOString()}`,
 		``,
 		`import type { Database } from '${databaseImportPath}'`,
 		``,
-	].join('\n')
+	]
 
-	const blocks = descriptors.flatMap(d => ([
-		`// Enum: ${d.enumName}`,
-		`export type ${d.pascalName} = Database['public']['Enums']['${d.enumName}']`,
-		d.literalValues.length
-			? `export const ${d.pascalName}Values = ${JSON.stringify(d.literalValues)} as const`
-			: `export const ${d.pascalName}Values = [] as const`,
+	const enumBlocks = descriptors.flatMap((descriptor) => ([
+		`// Enum: ${descriptor.enumName}`,
+		`export type ${descriptor.pascalName} = Database['public']['Enums']['${descriptor.enumName}']`,
+		descriptor.literalValues.length
+			? `export const ${descriptor.pascalName}Values = ${JSON.stringify(descriptor.literalValues)} as const`
+			: `export const ${descriptor.pascalName}Values = [] as const`,
 		``,
 	]))
 
-	const map = [
+	const enumMapLines = [
 		`export const Enums = {`,
-		...descriptors.map(d => `\t'${d.enumName}': ${d.pascalName}Values`),
+		...descriptors.map((descriptor) => `\t'${descriptor.enumName}': ${descriptor.pascalName}Values`),
 		`} as const`,
 		``,
-	].join('\n')
+	]
 
-	return [header, ...blocks, map].join('\n')
+	return [...headerLines, ...enumBlocks, ...enumMapLines].join('\n')
 }
 
 function main() {
-	const { get } = parseArgs()
-	const cwd = process.cwd()
-	const typesPath = path.resolve(cwd, get('types', 'types/database.types.ts'))
-	const outFile = path.resolve(cwd, get('out', 'nsdb/enums.ts'))
-	const dbImport = get('db-import-path', '~/types/database.types')
+	const parsedArguments = parseArgs()
+	const currentWorkingDirectory = process.cwd()
+	const typesFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('types', 'types/database.types.ts'))
+	const outputFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('out', 'nsdb/enums.ts'))
+	const databaseImportPath = parsedArguments.get('db-import-path', '~/types/database.types')
 
-	if (!exists(typesPath)) {
-		console.error(`❌ Missing types file: ${typesPath}`)
+	if (!exists(typesFilePath)) {
+		console.error(`❌ Missing types file: ${typesFilePath}`)
 		process.exit(1)
 	}
 
 	const project = createTsProject()
-	const sf = addSourceFile(project, typesPath)
-	const db = loadDatabaseAlias(sf)
-	if (!db) {
-		console.error(`❌ Type alias "Database" not found in ${typesPath}`)
+	const sourceFile = addSourceFile(project, typesFilePath)
+	const databaseAlias = loadDatabaseAlias(sourceFile)
+	if (!databaseAlias) {
+		console.error(`❌ Type alias "Database" not found in ${typesFilePath}`)
 		process.exit(1)
 	}
-	const enumsType = getPublicEnumsType(db)
+	const enumsType = getPublicEnumsType(databaseAlias)
 	if (!enumsType) {
-		console.warn(`⚠️ No Database["public"]["Enums"] — writing empty file`)
-		ensureDir(path.dirname(outFile))
-		writeText(outFile, `// auto-generated\nexport {}\n`)
-		console.log(`✅ enums: ${path.relative(cwd, outFile)}`)
+		console.warn('⚠️ Database["public"]["Enums"] not found — writing an empty file.')
+		ensureDir(path.dirname(outputFilePath))
+		writeText(outputFilePath, `// auto-generated\nexport {}\n`)
+		console.log(`✅ enums: ${path.relative(currentWorkingDirectory, outputFilePath)}`)
 		return
 	}
 
-	const descriptors = extractEnumDescriptors(sf, enumsType)
-	const content = buildContent(dbImport, descriptors)
-	writeText(outFile, content)
-	console.log(`✅ enums: ${path.relative(cwd, outFile)} — ${descriptors.length} enum(s)`)
+	const descriptors = extractEnumDescriptors(sourceFile, enumsType)
+	const fileContent = buildContent(databaseImportPath, descriptors)
+	writeText(outputFilePath, fileContent)
+	console.log(`✅ enums: ${path.relative(currentWorkingDirectory, outputFilePath)} — ${descriptors.length} enum(s)`)
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main()

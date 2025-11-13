@@ -5,39 +5,39 @@ import { removeDirIfExists, removeFileIfExists, listFiles } from '../helpers/io.
 
 function main() {
 	const { getBool } = parseArgs()
-	const verbose = getBool('verbose', false)
-	const deleteStores = !getBool('no-stores', false)
+	const verboseOutput = getBool('verbose', false)
+	const shouldDeleteStores = !getBool('no-stores', false)
 
-	const cwd = process.cwd()
-	const nsdbDir = path.resolve(cwd, 'nsdb')
-	const storesDir = path.resolve(cwd, 'stores')
-	const legacyModelFile = path.resolve(nsdbDir, 'models.ts')
+	const currentWorkingDirectory = process.cwd()
+	const nsdbDirectoryPath = path.resolve(currentWorkingDirectory, 'nsdb')
+	const storesDirectoryPath = path.resolve(currentWorkingDirectory, 'stores')
+	const legacyModelsFilePath = path.resolve(nsdbDirectoryPath, 'models.ts')
 
-	let removed = false
-	const deletedStores = []
+	let removedAnyFile = false
+	const deletedStoreFiles = []
 
-	removed = removeDirIfExists(nsdbDir, verbose) || removed
-	removed = removeFileIfExists(legacyModelFile, verbose) || removed
+	removedAnyFile = removeDirIfExists(nsdbDirectoryPath, verboseOutput) || removedAnyFile
+	removedAnyFile = removeFileIfExists(legacyModelsFilePath, verboseOutput) || removedAnyFile
 
-	if (deleteStores) {
-		for (const f of listFiles(storesDir)) {
-			if (f.startsWith('use') && f.endsWith('Store.ts')) {
-				const p = path.join(storesDir, f)
-				if (removeFileIfExists(p, verbose)) {
-					deletedStores.push(f)
-					removed = true
+	if (shouldDeleteStores) {
+		for (const fileName of listFiles(storesDirectoryPath)) {
+			if (fileName.startsWith('use') && fileName.endsWith('Store.ts')) {
+				const storeFilePath = path.join(storesDirectoryPath, fileName)
+				if (removeFileIfExists(storeFilePath, verboseOutput)) {
+					deletedStoreFiles.push(fileName)
+					removedAnyFile = true
 				}
 			}
 		}
 	}
 
-	if (removed) {
-		console.log('✅ Nettoyage terminé.')
-		if (deletedStores.length && !verbose) {
-			console.log(`🗑️  ${deletedStores.length} fichier(s) de store supprimé(s).`)
+	if (removedAnyFile) {
+		console.log('✅ Cleanup completed.')
+		if (deletedStoreFiles.length && !verboseOutput) {
+			console.log(`🗑️  Removed ${deletedStoreFiles.length} generated store file(s).`)
 		}
 	} else {
-		console.log('✅ Aucun fichier généré à supprimer.')
+		console.log('✅ Nothing to clean, generated files already removed.')
 	}
 }
 

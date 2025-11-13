@@ -1,90 +1,67 @@
 #!/usr/bin/env node
-
-import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
-import { Project, SyntaxKind, Node } from 'ts-morph'
+import { parseArgs } from '../helpers/args.js'
+import { exists, listFiles, writeText, ensureDir } from '../helpers/io.js'
+import { toPascal, storeName } from '../helpers/names.js'
 
-const cwd = process.cwd()
-const modelsPath = path.resolve(cwd, 'nsdb/models.ts')
-const outputDir = path.resolve(cwd, 'stores')
+function loadTableNames(modelsDirectoryPath) {
+	if (!exists(modelsDirectoryPath)) {
+		console.error(`❌ Missing models directory: ${modelsDirectoryPath}`)
+		process.exit(1)
+	}
 
-if (!fs.existsSync(modelsPath)) {
-	console.error(`❌ Fichier introuvable : ${modelsPath}`)
-	process.exit(1)
+	const entries = listFiles(modelsDirectoryPath)
+	return entries
+		.filter((entry) => entry.endsWith('.ts') && entry !== 'index.ts')
+		.map((entry) => entry.replace(/\.ts$/, ''))
+		.sort()
 }
 
-const tsconfigPath = path.resolve(cwd, 'tsconfig.json')
-if (!fs.existsSync(tsconfigPath)) {
-	console.error(`❌ tsconfig.json introuvable à la racine du projet.`)
-	process.exit(1)
-}
+function renderStoreFile({ tableName, storeIdentifier, rowTypeName, typesImportPath }) {
+	return `import { createDbStore } from '@lucashw68/nsdb/createDbStore'
+import type { Tables } from '${typesImportPath}'
 
-const project = new Project({
-	tsConfigFilePath: tsconfigPath,
-	skipAddingFilesFromTsConfig: true
+export type ${rowTypeName} = Tables<'${tableName}'>
+
+export const ${storeIdentifier} = createDbStore<${rowTypeName}>('${tableName}', {
+	key: 'id',
+	orderBy: 'updated_at',
+	defaultSort: 'desc',
 })
-
-const sourceFile = project.addSourceFileAtPath(modelsPath)
-
-const modelMapVar = sourceFile.getVariableDeclarationOrThrow('modelMap')
-const initializer = modelMapVar.getInitializer()
-
-if (!initializer) {
-	console.error('❌ modelMap n’a pas d\'initialiseur.')
-	process.exit(1)
+`
 }
 
-let obj
+function main() {
+	const parsedArguments = parseArgs()
+	const currentWorkingDirectory = process.cwd()
+	const modelsDirectoryPath = path.resolve(currentWorkingDirectory, parsedArguments.get('models-dir', 'nsdb/models'))
+	const storesDirectoryPath = path.resolve(currentWorkingDirectory, parsedArguments.get('stores-dir', 'stores'))
+	const typesImportPath = parsedArguments.get('types-import-path', '~/types/database.types')
+	const shouldOverwriteExisting = parsedArguments.getBool('force', false)
 
-if (initializer.getKind() === SyntaxKind.AsExpression) {
-	obj = initializer.getExpression()
-} else {
-	obj = initializer
-}
-
-if (!Node.isObjectLiteralExpression(obj)) {
-	console.error('❌ modelMap doit être un objet littéral, avec ou sans "as const".')
-	process.exit(1)
-}
-
-const entries = obj.getProperties().map(prop => {
-	const name = prop.getName().replace(/['"]/g, '')
-	return { name }
-})
-
-entries.forEach(({ name }) => {
-	const composableName = `use${capitalize(name)}Store`
-	const fileName = `${composableName}.ts`
-	const filePath = path.resolve(outputDir, fileName)
-
-	if (fs.existsSync(filePath)) {
-		console.log(`⚠️  ${fileName} existe déjà, ignoré.`)
+	const tableNames = loadTableNames(modelsDirectoryPath)
+	if (!tableNames.length) {
+		console.warn('⚠️ No model files found. Run generate:models first.')
 		return
 	}
 
-	const typeName = capitalize(name)
-	const content = `import { createDbStore } from '@lucashw68/nsdb/createDbStore''
-		import type { Tables } from '~/types/database.types'
+	ensureDir(storesDirectoryPath)
 
-		type ${typeName} = Tables<'${name}'>
+	for (const tableName of tableNames) {
+		const pascalName = toPascal(tableName)
+		const rowTypeName = `${pascalName}Row`
+		const storeIdentifier = storeName(tableName)
+		const storeFilePath = path.join(storesDirectoryPath, `${storeIdentifier}.ts`)
 
-		const baseStore = createDbStore<${typeName}>('${name}', {
-			key: 'id',
-			orderBy: 'updated_at',
-			defaultSort: 'desc',
-		})
+		if (exists(storeFilePath) && !shouldOverwriteExisting) {
+			console.log(`⚠️  ${path.relative(currentWorkingDirectory, storeFilePath)} already exists, skipping.`)
+			continue
+		}
 
-		export const ${composableName} = defineStore('${name}', () => {
-			const store = baseStore()
-			return { ...store }
-		})
-	`
-
-	fs.writeFileSync(filePath, content)
-	console.log(`✅ ${fileName} généré.`)
-})
-
-function capitalize(str) {
-	return str.charAt(0).toUpperCase() + str.slice(1)
+		const fileContent = renderStoreFile({ tableName, storeIdentifier, rowTypeName, typesImportPath })
+		writeText(storeFilePath, fileContent)
+		console.log(`✅ store: ${path.relative(currentWorkingDirectory, storeFilePath)}`)
+	}
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) main()

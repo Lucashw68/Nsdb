@@ -4,51 +4,77 @@ import { parseArgs } from '../helpers/args.js'
 import { ensureDir } from '../helpers/io.js'
 import { run, isAvailable } from '../helpers/shell.js'
 
-function buildCommand({ projectId, outputPath, schema, useLinked }) {
-	const base = ['npx supabase gen types typescript']
-	const schemaPart = schema ? `--schema ${schema}` : ''
-	if (useLinked) return `${base.join(' ')} ${schemaPart} --linked > "${outputPath}"`
-	return `${base.join(' ')} ${schemaPart} --project-id ${projectId} > "${outputPath}"`
+/**
+ * Build the Supabase CLI command that dumps the database types to disk.
+ */
+function buildCommand({ projectId, outputPath, schemaName, useLinkedProject }) {
+	const parts = ['npx supabase gen types typescript']
+	if (schemaName) parts.push(`--schema ${schemaName}`)
+	parts.push(useLinkedProject ? '--linked' : `--project-id ${projectId}`)
+	parts.push(`> "${outputPath}"`)
+	return parts.join(' ')
 }
 
-function main() {
-	const { get, getBool } = parseArgs()
-	const cwd = process.cwd()
-	const dotenvPath = path.resolve(cwd, get('dotenv', '.env'))
-	// charge .env si présent
-	try { (await import('dotenv')).config({ path: dotenvPath }) } catch {}
+async function loadDotenvIfAvailable(dotenvFilePath) {
+	try {
+		const dotenvModule = await import('dotenv')
+		dotenvModule.config({ path: dotenvFilePath })
+	} catch (error) {
+		const errorCode = error?.code || error?.cause?.code
+		if (errorCode !== 'ERR_MODULE_NOT_FOUND') {
+			console.warn(`⚠️  Unable to load dotenv file at ${dotenvFilePath}:`, error?.message || error)
+		}
+	}
+}
 
-	const outFile = path.resolve(cwd, get('out', 'types/database.types.ts'))
-	const projectId = get('project-id', process.env.SUPABASE_PROJECT_ID || '')
-	const schema = get('schema', 'public')
-	const useLinked = getBool('linked', false)
+async function main() {
+	const parsedArguments = parseArgs()
+	const currentWorkingDirectory = process.cwd()
+	const dotenvFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('dotenv', '.env'))
+	await loadDotenvIfAvailable(dotenvFilePath)
 
-	if (!useLinked && !projectId) {
-		console.error('❌ SUPABASE_PROJECT_ID manquant (utilisez --project-id ou --linked)')
+	const outputFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('out', 'types/database.types.ts'))
+	const projectId = parsedArguments.get('project-id', process.env.SUPABASE_PROJECT_ID || '')
+	const schemaName = parsedArguments.get('schema', 'public')
+	const useLinkedProject = parsedArguments.getBool('linked', false)
+
+	if (!useLinkedProject && !projectId) {
+		console.error('❌ Missing SUPABASE_PROJECT_ID (pass --project-id or --linked).')
 		process.exit(1)
 	}
 
 	if (!isAvailable('npx supabase --version')) {
-		console.error('❌ CLI Supabase absent. Exécute : npm i -D supabase')
+		console.error('❌ Supabase CLI not available. Install it with: npm i -D supabase')
 		process.exit(1)
 	}
 
-	ensureDir(path.dirname(outFile))
-	const cmd = buildCommand({ projectId, outputPath: outFile, schema, useLinked })
+	ensureDir(path.dirname(outputFilePath))
+	const commandLine = buildCommand({
+		projectId,
+		outputPath: outputFilePath,
+		schemaName,
+		useLinkedProject
+	})
 
-	console.log(`📦 Projet: ${useLinked ? '(linked)' : projectId}`)
-	console.log(`📁 Sortie: ${path.relative(cwd, outFile)}`)
-	console.log(`📚 Schéma: ${schema}`)
-	if (useLinked) console.log('🔗 Mode linked: ON')
-	console.log('🔄 Génération des types Supabase...')
+	console.log(`📦 Project: ${useLinkedProject ? '(linked)' : projectId}`)
+	console.log(`📁 Output: ${path.relative(currentWorkingDirectory, outputFilePath)}`)
+	console.log(`📚 Schema: ${schemaName}`)
+	if (useLinkedProject) console.log('🔗 Linked project mode enabled')
+	console.log('🔄 Generating Supabase types...')
 
 	try {
-		run(cmd, { inherit: true })
-		console.log('✅ Types générés avec succès.')
-	} catch (e) {
-		console.error('❌ Échec de la génération des types.')
+		run(commandLine, { inherit: true })
+		console.log('✅ Types generated successfully.')
+	} catch (error) {
+		console.error('❌ Failed to generate Supabase types.')
 		process.exit(1)
 	}
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+if (import.meta.url === `file://${process.argv[1]}`) {
+	main().catch((error) => {
+		console.error('❌ Unexpected error while generating types.')
+		console.error(error)
+		process.exit(1)
+	})
+}
