@@ -12,9 +12,7 @@ import { toPascal } from '../helpers/names.js'
 
 function guessFieldKindFromTypeText(typeText) {
 	const normalizedText = String(typeText || '').toLowerCase()
-	const normalizedQuotes = normalizedText.replace(/'/g, '"')
 
-	if (normalizedQuotes.includes('database["public"]["enums"]')) return 'enum'
 	if (normalizedText.includes('uuid')) return 'uuid'
 	if (normalizedText.includes('timestamp') || normalizedText.includes('date')) return 'timestamp'
 	if (normalizedText.includes('bool')) return 'boolean'
@@ -55,6 +53,21 @@ function isFieldRequired(insertType, fieldName) {
 	return !isOptional
 }
 
+// Récupère le texte brut du type tel qu'il est écrit dans `Insert`
+// (ex: `Database["public"]["Enums"]["PROVIDERS"] | null`)
+function getInsertPropertyTypeNodeText(insertType, fieldName) {
+	const insertPropertySymbol = insertType.getProperty(fieldName)
+	if (!insertPropertySymbol) return null
+
+	const declaration = insertPropertySymbol.getDeclarations()?.[0]
+	if (!declaration) return null
+
+	const typeNode = declaration.getTypeNode()
+	if (!typeNode) return null
+
+	return typeNode.getText()
+}
+
 function buildSchemaForTable(tableProperty, locationNode) {
 	const tableName = tableProperty.getName()
 	const pascalTableName = toPascal(tableName)
@@ -83,13 +96,23 @@ function buildSchemaForTable(tableProperty, locationNode) {
 
 		const fieldIsRequired = isFieldRequired(insertType, fieldName)
 
-		// Kind: prefer Insert type (closer to what we actually write) and fall back to Row
-		const inferredKind = guessFieldKindFromTypeText(
+		// Texte du type tel qu'il est écrit dans Insert
+		// => ex: Database["public"]["Enums"]["PROVIDERS"] | null
+		const insertRawTypeReferenceText = getInsertPropertyTypeNodeText(
+			insertType,
+			fieldName
+		)
+
+		const enumName = extractEnumNameFromTypeText(insertRawTypeReferenceText)
+
+		let fieldKind = guessFieldKindFromTypeText(
 			insertFieldTypeText || rowFieldTypeText
 		)
 
-		// Enum detection MUST come from Insert type
-		const enumName = extractEnumNameFromTypeText(insertFieldTypeText)
+		// Si on a trouvé un enum sur Insert, on force le type à 'enum'
+		if (enumName) {
+			fieldKind = 'enum'
+		}
 
 		const isPrimaryKey = fieldName === 'id'
 		const isReadOnlyField =
@@ -100,7 +123,7 @@ function buildSchemaForTable(tableProperty, locationNode) {
 			: ''
 
 		fieldLines.push(
-			`\t${fieldName}: { type: '${inferredKind}', required: ${fieldIsRequired}` +
+			`\t${fieldName}: { type: '${fieldKind}', required: ${fieldIsRequired}` +
 				`${isPrimaryKey ? ', primaryKey: true' : ''}` +
 				`${isReadOnlyField ? ', readOnly: true' : ''}` +
 				`${enumAttachment} },`
