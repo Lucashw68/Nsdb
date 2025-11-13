@@ -120,7 +120,8 @@ function parseArrayLiteralFromTypeText(typeText) {
  */
 function guessFieldKindFromTypeText(typeText) {
 	const normalized = String(typeText).toLowerCase()
-	if (normalized.includes('database["public"]["enums"]')) return 'enum'
+	const normalizedQuotes = normalized.replace(/'/g, '"')
+	if (normalizedQuotes.includes('database["public"]["enums"]')) return 'enum'
 	if (normalized.includes('uuid')) return 'uuid'
 	if (normalized.includes('timestamp') || normalized.includes('date')) return 'timestamp'
 	if (normalized.includes('bool')) return 'boolean'
@@ -142,7 +143,9 @@ function guessFieldKindFromTypeText(typeText) {
  * @returns {string|null}
  */
 function extractEnumNameFromTypeText(typeText) {
-	const match = String(typeText).match(/Database\["public"\]\["Enums"\]\["([^"]+)"\]/)
+	const match = String(typeText)
+		.replace(/'/g, '"')
+		.match(/Database\["public"\]\["Enums"\]\["([^"]+)"\]/)
 	return match?.[1] ?? null
 }
 
