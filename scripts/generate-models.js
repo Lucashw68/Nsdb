@@ -1,60 +1,75 @@
 #!/usr/bin/env node
-import fs from 'fs'
 import path from 'path'
-import { Project } from 'ts-morph'
-import { toPascal, singular, modelHookName, storeName } from '../helpers/names.js'
+import { parseArgs } from '../helpers/args.js'
+import { exists, readText, writeText, ensureDir } from '../helpers/io.js'
+import { createTsProject, addSourceFile, loadDatabaseAlias, getPublicTablesType } from '../helpers/ts.js'
+import { toPascal, modelHookName, storeName } from '../helpers/names.js'
 
-const cwd = process.cwd()
-const typesPath = path.resolve(cwd, 'types/database.types.ts')
-const outDir = path.resolve(cwd, 'nsdb/models')
-const barrel = path.join(outDir, 'index.ts')
-const tplPath = path.resolve(cwd, 'node_modules/@lucashw68/nsdb/templates/model.template.ts')
-
-if (!fs.existsSync(typesPath)) {
-	console.error(`❌ Missing: ${typesPath}`); process.exit(1)
-}
-if (!fs.existsSync(tplPath)) {
-	console.error(`❌ Missing template: ${tplPath}`); process.exit(1)
-}
-fs.mkdirSync(outDir, { recursive: true })
-
-const project = new Project({ skipAddingFilesFromTsConfig: true })
-const sf = project.addSourceFileAtPath(typesPath)
-
-let db
-try { db = sf.getTypeAliasOrThrow('Database') }
-catch { console.error('❌ "Database" type not found'); process.exit(1) }
-
-const publicType = db.getType().getProperty('public')?.getTypeAtLocation(db)
-const tablesType = publicType?.getProperty('Tables')?.getTypeAtLocation(db)
-if (!tablesType) { console.error('❌ Database["public"]["Tables"] missing'); process.exit(1) }
-
-const tables = tablesType.getProperties().map(p => p.getName())
-const tpl = fs.readFileSync(tplPath, 'utf8')
-
-const lines = []
-
-for (const table of tables) {
-	const pascal = toPascal(table)
+function buildModelCode(tableName, tpl, cwd) {
+	const pascal = toPascal(tableName)
 	const row = `${pascal}Row`
-	const hook = modelHookName(table) // e.g., useProfiles
-	const storeC = storeName(table)   // e.g., useProfileStore
-	const storeFile = `stores/${storeC}.ts`
-	const storeExists = fs.existsSync(path.resolve(cwd, storeFile))
+	const hook = modelHookName(tableName)
+	const storeClass = storeName(tableName)
+	const storeFileRel = `stores/${storeClass}.ts`
+	const storeAbs = path.resolve(cwd, storeFileRel)
+	const hasStore = exists(storeAbs)
 
 	const code = tpl
-		.replace(/__TABLE__/g, table)
+		.replace(/__TABLE__/g, tableName)
 		.replace(/__PASCAL__/g, pascal)
 		.replace(/__ROW__/g, row)
 		.replace(/__HOOK__/g, hook)
-		.replace(/__STORE_IMPORT__/g, storeExists ? `import { ${storeC} } from '~/stores/${storeC}'` : '')
-		.replace(/__STORE_CREATOR__/g, storeExists ? `(() => ${storeC}())` : `undefined`)
+		.replace(/__STORE_IMPORT__/g, hasStore ? `import { ${storeClass} } from '~/stores/${storeClass}'` : '')
+		.replace(/__STORE_CREATOR__/g, hasStore ? `(() => ${storeClass}())` : `undefined`)
 
-	const file = path.join(outDir, `${table}.ts`)
-	fs.writeFileSync(file, code, 'utf8')
-	lines.push(`export * from './${path.basename(file, '.ts')}' // ${hook}`)
-	console.log('✅ model:', path.relative(cwd, file))
+	return { code, hook }
 }
 
-fs.writeFileSync(barrel, lines.join('\n') + '\n', 'utf8')
-console.log('✅ models barrel:', path.relative(cwd, barrel))
+function main() {
+	const { get } = parseArgs()
+	const cwd = process.cwd()
+	const typesPath = path.resolve(cwd, get('types', 'types/database.types.ts'))
+	const outDir = path.resolve(cwd, get('outDir', 'nsdb/models'))
+	const barrel = path.join(outDir, 'index.ts')
+	const templatePath = path.resolve(cwd, get('template', 'node_modules/@lucashw68/nsdb/templates/model.template.ts'))
+
+	if (!exists(typesPath)) {
+		console.error(`❌ Missing types file: ${typesPath}`)
+		process.exit(1)
+	}
+	if (!exists(templatePath)) {
+		console.error(`❌ Missing template: ${templatePath}`)
+		process.exit(1)
+	}
+	ensureDir(outDir)
+
+	const project = createTsProject()
+	const sf = addSourceFile(project, typesPath)
+	const db = loadDatabaseAlias(sf)
+	if (!db) {
+		console.error('❌ Type alias "Database" not found')
+		process.exit(1)
+	}
+	const tablesType = getPublicTablesType(db)
+	if (!tablesType) {
+		console.error('❌ Database["public"]["Tables"] not found')
+		process.exit(1)
+	}
+
+	const tpl = readText(templatePath)
+	const exports = []
+
+	for (const prop of tablesType.getProperties()) {
+		const table = prop.getName()
+		const { code, hook } = buildModelCode(table, tpl, cwd)
+		const file = path.join(outDir, `${table}.ts`)
+		writeText(file, code)
+		console.log('✅ model:', path.relative(cwd, file))
+		exports.push(`export * from './${table}' // ${hook}`)
+	}
+
+	writeText(barrel, exports.join('\n') + '\n')
+	console.log('✅ models barrel:', path.relative(cwd, barrel))
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) main()

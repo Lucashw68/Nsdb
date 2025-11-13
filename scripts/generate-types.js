@@ -1,57 +1,54 @@
 #!/usr/bin/env node
-
-import { execSync } from 'node:child_process'
 import path from 'path'
-import * as dotenv from 'dotenv'
-import { fileURLToPath } from 'url'
-import { existsSync, mkdirSync } from 'fs'
+import { parseArgs } from '../helpers/args.js'
+import { ensureDir } from '../helpers/io.js'
+import { run, isAvailable } from '../helpers/shell.js'
 
-// Récupère le répertoire courant (du projet utilisateur)
-const cwd = process.cwd()
-
-// Tente de charger .env à la racine du projet
-const envPath = path.resolve(cwd, '.env')
-if (existsSync(envPath)) {
-	dotenv.config({ path: envPath })
+function buildCommand({ projectId, outputPath, schema, useLinked }) {
+	const base = ['npx supabase gen types typescript']
+	const schemaPart = schema ? `--schema ${schema}` : ''
+	if (useLinked) return `${base.join(' ')} ${schemaPart} --linked > "${outputPath}"`
+	return `${base.join(' ')} ${schemaPart} --project-id ${projectId} > "${outputPath}"`
 }
 
-const projectId = process.env.SUPABASE_PROJECT_ID
-const supabaseUrl = process.env.SUPABASE_URL
-const supabaseKey = process.env.SUPABASE_KEY
+function main() {
+	const { get, getBool } = parseArgs()
+	const cwd = process.cwd()
+	const dotenvPath = path.resolve(cwd, get('dotenv', '.env'))
+	// charge .env si présent
+	try { (await import('dotenv')).config({ path: dotenvPath }) } catch {}
 
-if (!projectId) {
-	console.error('❌ SUPABASE_PROJECT_ID is not defined in .env (or environment)')
-	process.exit(1)
-}
+	const outFile = path.resolve(cwd, get('out', 'types/database.types.ts'))
+	const projectId = get('project-id', process.env.SUPABASE_PROJECT_ID || '')
+	const schema = get('schema', 'public')
+	const useLinked = getBool('linked', false)
 
-if (!supabaseUrl || !supabaseKey) {
-	console.error('❌ SUPABASE_URL and SUPABASE_KEY must be defined in .env (or environment)')
-	process.exit(1)
-}
+	if (!useLinked && !projectId) {
+		console.error('❌ SUPABASE_PROJECT_ID manquant (utilisez --project-id ou --linked)')
+		process.exit(1)
+	}
 
-try {
-	execSync('npx supabase --version', { stdio: 'ignore' })
-} catch {
-	console.error('❌ Le CLI Supabase n\'est pas installé. Veuillez exécuter : npm install -D supabase')
-	process.exit(1)
-}
+	if (!isAvailable('npx supabase --version')) {
+		console.error('❌ CLI Supabase absent. Exécute : npm i -D supabase')
+		process.exit(1)
+	}
 
-// Prépare le chemin de sortie
-const typesDir = path.resolve(cwd, 'types')
-const outputPath = path.join(typesDir, 'database.types.ts')
+	ensureDir(path.dirname(outFile))
+	const cmd = buildCommand({ projectId, outputPath: outFile, schema, useLinked })
 
-// Crée le dossier types/ s'il n'existe pas
-if (!existsSync(typesDir)) {
-	mkdirSync(typesDir, { recursive: true })
-}
-
-const command = `npx supabase gen types typescript --project-id ${projectId} > "${outputPath}"`
-
-try {
+	console.log(`📦 Projet: ${useLinked ? '(linked)' : projectId}`)
+	console.log(`📁 Sortie: ${path.relative(cwd, outFile)}`)
+	console.log(`📚 Schéma: ${schema}`)
+	if (useLinked) console.log('🔗 Mode linked: ON')
 	console.log('🔄 Génération des types Supabase...')
-	execSync(command, { stdio: 'inherit', shell: true })
-	console.log(`✅ Types générés avec succès dans : ${outputPath}`)
-} catch (err) {
-	console.error('❌ Échec de la génération des types Supabase.', err)
-	process.exit(1)
+
+	try {
+		run(cmd, { inherit: true })
+		console.log('✅ Types générés avec succès.')
+	} catch (e) {
+		console.error('❌ Échec de la génération des types.')
+		process.exit(1)
+	}
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) main()

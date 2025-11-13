@@ -1,40 +1,44 @@
 #!/usr/bin/env node
-
-import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { parseArgs } from '../helpers/args.js'
+import { removeDirIfExists, removeFileIfExists, listFiles } from '../helpers/io.js'
 
-const cwd = process.cwd()
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+function main() {
+	const { getBool } = parseArgs()
+	const verbose = getBool('verbose', false)
+	const deleteStores = !getBool('no-stores', false)
 
-const nsdbDir = path.resolve(cwd, 'nsdb')
-const storesDir = path.resolve(cwd, 'stores')
-const modelFile = path.resolve(nsdbDir, 'models.ts')
+	const cwd = process.cwd()
+	const nsdbDir = path.resolve(cwd, 'nsdb')
+	const storesDir = path.resolve(cwd, 'stores')
+	const legacyModelFile = path.resolve(nsdbDir, 'models.ts')
 
-if (!fs.existsSync(nsdbDir)) {
-	console.log('ℹ️  Le dossier nsdb/ n\'existe pas.')
-	process.exit(0)
-}
+	let removed = false
+	const deletedStores = []
 
-// Supprime les fichiers useXStore.ts
-const deleted = []
-fs.readdirSync(storesDir).forEach(file => {
-	if (file.startsWith('use') && file.endsWith('Store.ts')) {
-		const fullPath = path.join(entitiesDir, file)
-		fs.unlinkSync(fullPath)
-		deleted.push(file)
+	removed = removeDirIfExists(nsdbDir, verbose) || removed
+	removed = removeFileIfExists(legacyModelFile, verbose) || removed
+
+	if (deleteStores) {
+		for (const f of listFiles(storesDir)) {
+			if (f.startsWith('use') && f.endsWith('Store.ts')) {
+				const p = path.join(storesDir, f)
+				if (removeFileIfExists(p, verbose)) {
+					deletedStores.push(f)
+					removed = true
+				}
+			}
+		}
 	}
-})
 
-// Supprime models.ts s'il existe
-if (fs.existsSync(modelFile)) {
-	fs.unlinkSync(modelFile)
-	deleted.push('models.ts')
+	if (removed) {
+		console.log('✅ Nettoyage terminé.')
+		if (deletedStores.length && !verbose) {
+			console.log(`🗑️  ${deletedStores.length} fichier(s) de store supprimé(s).`)
+		}
+	} else {
+		console.log('✅ Aucun fichier généré à supprimer.')
+	}
 }
 
-if (deleted.length > 0) {
-	console.log(`🗑️  Fichiers supprimés :\n- ${deleted.join('\n- ')}`)
-} else {
-	console.log('✅ Aucun fichier généré à supprimer.')
-}
+if (import.meta.url === `file://${process.argv[1]}`) main()
