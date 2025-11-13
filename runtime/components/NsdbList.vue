@@ -1,58 +1,57 @@
 <script setup lang="ts">
-/**
- * Props simples :
- * - model: nom de table (clé côté nsdb/models)
- * - columns: [{ key, label, format? }]
- * - pageSize: nb d'éléments par page
- * - query: options passées à fetch() (orderBy, filters, etc.)
- */
-type Column = { key: string; label: string; format?: (value: any, row: any) => string }
+import { ref, watch, computed } from 'vue'
+import { useSupabaseModel } from '../composables/useSupabaseModel'
+
+type Column = {
+	key: string
+	label: string
+	format?: (value: any, row: any) => string
+}
 
 const props = defineProps<{
 	model: string
-	columns: Column[]
-	pageSize?: number
-	query?: Record<string, any>
+	columns?: Column[]
+	pageSize?: number // gardé pour plus tard si tu fais une pagination côté API
 }>()
 
-const page = ref(1)
 const loading = ref(false)
-const rows = ref<any[]>([])
-const total = ref<number | null>(null)
 const error = ref<string | null>(null)
 
-// composable runtime du module
-const { useModel } = useSupabaseModels()
-const model = useModel(props.model) // expose .fetch(), .items? selon ton impl.
+// On utilise ton composable tel quel, en mode API (pas de store)
+const model = useSupabaseModel<any>(props.model, { store: false })
+
+// Dans useSupabaseModel, tu exposes `items` + `fetch`
+const rows = computed(() => model.items.value)
 
 async function load() {
 	loading.value = true
 	error.value = null
 	try {
-		const { items, count } = await model.fetch({
-			page: page.value,
-			pageSize: props.pageSize ?? 20,
-			...(props.query ?? {})
-		})
-		rows.value = items ?? []
-		total.value = count ?? null
+		await model.fetch()
 	} catch (e: any) {
 		error.value = e?.message ?? 'Erreur de chargement'
-		rows.value = []
-		total.value = null
 	} finally {
 		loading.value = false
 	}
 }
 
-watch(() => [props.model, props.pageSize, props.query, page.value], load, { immediate: true })
+// charge au montage et si le model change
+watch(() => props.model, load, { immediate: true })
+
+// colonnes déduites si non fournies
+const effectiveColumns = computed<Column[]>(() => {
+	if (props.columns && props.columns.length > 0) return props.columns
+	const first = rows.value[0]
+	if (!first) return []
+	return Object.keys(first).map(key => ({ key, label: key }))
+})
 </script>
 
 <template>
 	<div class="w-full space-y-3">
 		<div class="flex items-center justify-between">
 			<h3 class="text-lg font-semibold">Liste: {{ model }}</h3>
-			<div class="text-sm opacity-70" v-if="total !== null">{{ total }} éléments</div>
+			<div class="text-sm opacity-70" v-if="rows.length">{{ rows.length }} éléments</div>
 		</div>
 
 		<div v-if="error" class="text-sm text-red-600">{{ error }}</div>
@@ -61,31 +60,39 @@ watch(() => [props.model, props.pageSize, props.query, page.value], load, { imme
 			<table class="min-w-full text-sm">
 				<thead class="bg-gray-50">
 					<tr>
-						<th v-for="c in columns" :key="c.key" class="text-left px-4 py-2 font-medium">
-							{{ c.label }}
+						<th
+							v-for="column in effectiveColumns"
+							:key="column.key"
+							class="text-left px-4 py-2 font-medium"
+						>
+							{{ column.label }}
 						</th>
 					</tr>
 				</thead>
 				<tbody>
 					<tr v-if="loading">
-						<td :colspan="columns.length" class="px-4 py-6 text-center">Chargement…</td>
+						<td :colspan="effectiveColumns.length || 1" class="px-4 py-6 text-center">
+							Chargement…
+						</td>
 					</tr>
+
 					<tr v-else-if="rows.length === 0">
-						<td :colspan="columns.length" class="px-4 py-6 text-center">Aucun résultat</td>
+						<td :colspan="effectiveColumns.length || 1" class="px-4 py-6 text-center">
+							Aucun résultat
+						</td>
 					</tr>
-					<tr v-else v-for="row in rows" :key="row.id" class="border-t">
-						<td v-for="c in columns" :key="c.key" class="px-4 py-2">
-							{{ c.format ? c.format(row[c.key], row) : row[c.key] }}
+
+					<tr v-else v-for="row in rows" :key="row.id ?? JSON.stringify(row)" class="border-t">
+						<td
+							v-for="column in effectiveColumns"
+							:key="column.key"
+							class="px-4 py-2"
+						>
+							{{ column.format ? column.format(row[column.key], row) : row[column.key] }}
 						</td>
 					</tr>
 				</tbody>
 			</table>
-		</div>
-
-		<div class="flex items-center gap-2">
-			<button class="px-3 py-1 rounded-xl border" :disabled="page===1" @click="page--">Précédent</button>
-			<span class="text-sm">Page {{ page }}</span>
-			<button class="px-3 py-1 rounded-xl border" @click="page++">Suivant</button>
 		</div>
 	</div>
 </template>
