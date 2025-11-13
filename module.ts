@@ -17,6 +17,7 @@ export default defineNuxtModule<NsdbOptions>({
 	defaults: { withComponents: true, componentsPrefix: 'Nsdb', withStores: true },
 
 	setup(options, nuxt) {
+		const { resolve } = createResolver(import.meta.url)
 		const rMod = createResolver(import.meta.url)
 		const rApp = createResolver(nuxt.options.srcDir)
 
