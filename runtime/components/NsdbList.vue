@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { useSupabaseModel } from '../composables/useSupabaseModel'
+import { useSupabaseModel } from '#imports'
 
 type Column = {
 	key: string
@@ -11,23 +11,22 @@ type Column = {
 const props = defineProps<{
 	model: string
 	columns?: Column[]
-	pageSize?: number // gardé pour plus tard si tu fais une pagination côté API
+	pageSize?: number
 }>()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-// On utilise ton composable tel quel, en mode API (pas de store)
-const model = useSupabaseModel<any>(props.model, { store: false })
+// ✅ on renomme pour ne pas masquer props.model
+const nsdbModel = useSupabaseModel<any>(props.model, { store: false })
 
-// Dans useSupabaseModel, tu exposes `items` + `fetch`
-const rows = computed(() => model.items.value)
+const rows = computed(() => nsdbModel.items.value)
 
 async function load() {
 	loading.value = true
 	error.value = null
 	try {
-		await model.fetch()
+		await nsdbModel.fetch()
 	} catch (e: any) {
 		error.value = e?.message ?? 'Erreur de chargement'
 	} finally {
@@ -35,10 +34,8 @@ async function load() {
 	}
 }
 
-// charge au montage et si le model change
 watch(() => props.model, load, { immediate: true })
 
-// colonnes déduites si non fournies
 const effectiveColumns = computed<Column[]>(() => {
 	if (props.columns && props.columns.length > 0) return props.columns
 	const first = rows.value[0]
@@ -50,7 +47,8 @@ const effectiveColumns = computed<Column[]>(() => {
 <template>
 	<div class="w-full space-y-3">
 		<div class="flex items-center justify-between">
-			<h3 class="text-lg font-semibold">Liste: {{ model }}</h3>
+			<!-- ✅ on affiche bien la prop -->
+			<h3 class="text-lg font-semibold">Liste: {{ props.model }}</h3>
 			<div class="text-sm opacity-70" v-if="rows.length">{{ rows.length }} éléments</div>
 		</div>
 
