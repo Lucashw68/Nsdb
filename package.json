@@ -54,6 +54,7 @@
 		"generate:enums": "node ./scripts/generate-enums.js",
 		"generate:schemas": "node ./scripts/generate-schemas.js",
 		"generate:models": "node ./scripts/generate-models.js",
+		"generate:composables": "node ./scripts/generate-composables.js",
 		"generate:stores": "node ./scripts/generate-stores.js",
 		"generate:all": "npm run generate:types && npm run generate:enums && npm run generate:schemas && npm run generate:models && npm run generate:stores",
 		"clear": "node scripts/clear.js"

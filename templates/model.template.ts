@@ -9,7 +9,11 @@ export type __ROW__ = Tables<'__TABLE__'>
 function __emptyFromSchema(): Partial<__ROW__> {
 	const out: Record<string, any> = {}
 	for (const [k, def] of Object.entries(__PASCAL__Schema as Record<string, any>)) {
-		out[k] = 'default' in def ? def.default : (def.type === 'boolean' ? false : null)
+		if (def.readOnly || def.primaryKey) continue
+
+		out[k] = 'default' in def
+			? def.default
+			: (def.type === 'boolean' ? false : null)
 	}
 	return out as Partial<__ROW__>
 }
@@ -21,22 +25,20 @@ export function __HOOK__(opts: { store?: boolean } = {}) {
 		{ store: !!opts.store, storeCreator: __STORE_CREATOR__ }
 	)
 
-	const list = model.items
 	const all = async () => {
 		const rows = await model.fetch()
-		list.value = Array.isArray(rows) ? rows : []
-		return list.value as __ROW__[]
+		return model.items as __ROW__[]
 	}
 
 	const fields = Object.keys(__PASCAL__Schema)
 	const editableKeys = computed(() =>
 		Object.entries(__PASCAL__Schema as Record<string, any>)
-			.filter(([, d]) => !d.readonly)
+			.filter(([, d]) => !d.readOnly)
 			.map(([k]) => k)
 	)
 
 	return {
-		list,
+		items: model.items,
 		schema: __PASCAL__Schema,
 		fields,
 		editableKeys,
