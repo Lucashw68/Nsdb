@@ -30,7 +30,7 @@ function main() {
 		currentWorkingDirectory,
 		parsedArguments.get(
 			'template',
-			'node_modules/@lucashw68/nsdb/templates/use-nsdb-model.template.ts'
+			'node_modules/@lucashw68/nsdb/templates/useNsdbModel.template.ts'
 		)
 	)
 

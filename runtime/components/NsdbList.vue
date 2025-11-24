@@ -242,6 +242,8 @@ const sortedRows = computed(() => {
 </template>
 
 <style scoped>
+@reference "#tailwind";
+
 .nsdb-table {
   width: 100% !important;
   max-width: 100%;
