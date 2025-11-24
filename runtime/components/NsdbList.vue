@@ -192,12 +192,12 @@ const sortedRows = computed(() => {
 							<tr
 								v-for="row in sortedRows"
 								:key="row.id ?? JSON.stringify(row)"
-								class="border-t hover:bg-gray-400 hover:cursor-pointer border-2 border-white"
+								class="border-t hover:bg-gray-400 hover:cursor-pointer"
 							>
 								<td
 									v-for="column in effectiveColumns"
 									:key="column.key"
-									class="py-2 px-4 text-center border-l-2 border-gray-200 p-4"
+									class="py-2 px-4 text-center"
 								>
 									<slot
 										name="cell"
@@ -209,7 +209,7 @@ const sortedRows = computed(() => {
 									</slot>
 								</td>
 
-								<td class="flex items-center gap-2 py-2 px-4 justify-center border-l-2 border-gray-200 p-4">
+								<td class="flex items-center gap-2 py-2 px-4 justify-center">
 									<!-- <button class="flex items-center rounded-full hover:bg-gray-600 px-2 py-1">
 										<Icon name="mdi:edit" class="w-4 h-4" />
 									</button> -->
@@ -242,6 +242,8 @@ const sortedRows = computed(() => {
 </template>
 
 <style scoped>
+@reference "tailwindcss";
+
 .nsdb-table {
   width: 100% !important;
   max-width: 100%;
@@ -254,4 +256,13 @@ const sortedRows = computed(() => {
   width: stretch;
   max-width: 100%;
 }
+
+.nsdb-table tr {
+  @apply border-2 border-white;
+}
+
+.nsdb-table td {
+  @apply border-l-2 border-gray-200 p-4;
+}
+
 </style>
