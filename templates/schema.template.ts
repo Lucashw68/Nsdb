@@ -1,6 +1,6 @@
 import type { Tables } from '~/types/database.types'
 import type { EntityField } from '@lucashw68/nsdb/types/entities'
-import * as Enums from '~/nsdb/enums'
+import * as Enums from '~~/nsdb/enums'
 
 // Convenience row type for this table (optional)
 export type __ROW__ = Tables<'__TABLE__'>

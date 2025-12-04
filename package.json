@@ -23,13 +23,13 @@
 	},
 	"exports": {
 		".": "./module.ts",
-		"./useEntitiesStore": "./runtime/stores/useEntitiesStore.ts",
 		"./useSupabaseApi": "./runtime/composables/useSupabaseApi.ts",
 		"./useSupabaseApiStorage": "./runtime/composables/useSupabaseApiStorage.ts",
 		"./useSupabaseModels": "./runtime/composables/useSupabaseModels.ts",
+		"./useNsdbSchemas": "./runtime/composables/useNsdbSchemas.ts",
+		"./types/entities": "./types/entities.ts",
 		"./createDbStore": "./runtime/stores/createDbStore.ts",
-		"./createSingletonDbStore": "./runtime/stores/createSingletonDbStore.ts",
-		"./types/entities": "./types/entities.ts"
+		"./createSingletonDbStore": "./runtime/stores/createSingletonDbStore.ts"
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.56.0",

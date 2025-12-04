@@ -2,6 +2,8 @@
 	import { ref, watch, computed } from 'vue'
 	import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels'
 
+	console.warn('[NsdbList] UPDATED PAGINATED VERSION LOADED')
+
 	type Column = {
 		key: string
 		label: string
@@ -47,13 +49,14 @@
 		td: 'py-2 px-4 text-center border-2 border-white',
 		actionsTd: 'flex items-center gap-2 py-2 px-4 justify-center',
 		deleteButton: 'flex items-center rounded-full hover:bg-gray-600 px-2 py-1',
-		footer: 'w-full flex justify-end items-center mt-2',
+		footer: 'w-full flex justify-between items-center mt-2',
 	}
 
 	const props = defineProps<{
 		model: string
 		columns?: Column[]
 		pageSize?: number
+		query?: any
 		classes?: Partial<NsdbTableClasses>
 		unstyled?: boolean
 	}>()
@@ -63,10 +66,8 @@
 
 	const nsdbModel = useNsdbModel(props.model, { store: false })
 
-	// données brutes, dans l'ordre d'origine
 	const rows = computed(() => nsdbModel.items.value)
 
-	// 🔽 état de tri
 	const sortState = ref<{
 		key: string | null
 		direction: 'asc' | 'desc' | null
@@ -75,9 +76,15 @@
 		direction: null,
 	})
 
+	const currentPage = ref(1)
+
+	const pageSize = computed(() => {
+		if (props.pageSize != null) return props.pageSize
+		return undefined
+	})
+
 	const classes = computed<NsdbTableClasses>(() => {
 		if (props.unstyled) {
-			// on renvoie toutes les clés vides pour laisser 100% la main
 			return Object.keys(defaultClasses).reduce((acc, key) => {
 				// @ts-expect-error: key est bien une clé de NsdbTableClasses
 				acc[key] = ''
@@ -91,11 +98,39 @@
 		}
 	})
 
+	const canGoPrev = computed(() => currentPage.value > 1)
+
+	const canGoNext = computed(() => {
+		if (!pageSize.value) {
+			return rows.value.length > 0
+		}
+		// Heuristique : tant qu'on a un "plein" pageSize, on considère qu'il peut y avoir une page suivante
+		return rows.value.length === pageSize.value
+	})
+
 	async function load() {
 		loading.value = true
 		error.value = null
+
 		try {
-			await nsdbModel.all()
+			const baseQuery = props.query ?? {}
+
+			const limit =
+				pageSize.value ??
+				baseQuery.limit ??
+				100
+
+			const offset =
+				baseQuery.offset ??
+				(currentPage.value - 1) * limit
+
+			const finalQuery = {
+				...baseQuery,
+				limit,
+				offset,
+			}
+
+			await nsdbModel.all?.(finalQuery)
 		} catch (e: any) {
 			error.value = e?.message ?? 'Erreur de chargement'
 		} finally {
@@ -103,16 +138,47 @@
 		}
 	}
 
-	watch(() => props.model, load, { immediate: true })
+	async function goToPage(page: number) {
+		if (page < 1) return
+		currentPage.value = page
+		await load()
+	}
+
+	async function handlePrevPage() {
+		if (!canGoPrev.value) return
+		await goToPage(currentPage.value - 1)
+	}
+
+	async function handleNextPage() {
+		if (!canGoNext.value) return
+		await goToPage(currentPage.value + 1)
+	}
+
+	watch(
+		() => [props.model, props.pageSize, props.query],
+		() => {
+			currentPage.value = 1
+			load()
+		},
+		{ immediate: true, deep: true }
+	)
 
 	const effectiveColumns = computed<Column[]>(() => {
-		if (props.columns && props.columns.length > 0) return props.columns
+		if (props.columns && props.columns.length > 0) {
+			props.columns.forEach(column => {
+				if (typeof column.key !== 'string') {
+					console.warn('[NsdbList] column.key should be a string, got:', column.key)
+				}
+			})
+			return props.columns
+		}
+
 		const first = rows.value[0]
 		if (!first) return []
+
 		return Object.keys(first).map(key => ({ key, label: key }))
 	})
 
-	// 🔽 toggle 3-états : none -> asc -> desc -> none
 	function toggleSort(column: Column) {
 		if (sortState.value.key !== column.key) {
 			sortState.value = { key: column.key, direction: 'asc' }
@@ -124,11 +190,37 @@
 			return
 		}
 
-		// était 'desc' → on revient à l'origine (pas de tri)
 		sortState.value = { key: null, direction: null }
 	}
 
-	// 🔽 rows triées (ou brutes si pas de tri)
+	function getDeep(row: any, path: unknown) {
+		if (!row || path == null) return null
+
+		if (Array.isArray(path)) {
+			let current: any = row
+			for (const part of path) {
+				if (current == null) return null
+				current = current[part as keyof typeof current]
+			}
+			return current
+		}
+
+		if (typeof path !== 'string') {
+			console.warn('[NsdbList.getDeep] path is not a string:', path, 'typeof =', typeof path)
+			return null
+		}
+
+		const segments = path.split('.')
+		let current: any = row
+
+		for (const segment of segments) {
+			if (current == null) return null
+			current = current[segment as keyof typeof current]
+		}
+
+		return current
+	}
+
 	const sortedRows = computed(() => {
 		const base = [...rows.value]
 
@@ -140,17 +232,37 @@
 		}
 
 		return base.sort((a, b) => {
-			const av = a[key]
-			const bv = b[key]
+			const valueA = getDeep(a, key)
+			const valueB = getDeep(b, key)
 
-			// on convertit en string pour un tri "alpha" générique
-			const astr = av == null ? '' : String(av).toLowerCase()
-			const bstr = bv == null ? '' : String(bv).toLowerCase()
+			const stringA = valueA == null ? '' : String(valueA).toLowerCase()
+			const stringB = valueB == null ? '' : String(valueB).toLowerCase()
 
-			const cmp = astr.localeCompare(bstr)
-			return direction === 'asc' ? cmp : -cmp
+			const comparison = stringA.localeCompare(stringB)
+			return direction === 'asc' ? comparison : -comparison
 		})
 	})
+
+	async function handleDelete(row: any) {
+		const id = row?.id
+		if (id == null) return
+
+		try {
+			if (typeof nsdbModel.delete === 'function') {
+				await nsdbModel.delete(id)
+			} else if (typeof nsdbModel.remove === 'function') {
+				await nsdbModel.remove(id)
+			} else {
+				console.warn('[NsdbList] No delete/remove method found on nsdbModel for', props.model)
+				return
+			}
+
+			// On recharge la page courante après suppression
+			await load()
+		} catch (e) {
+			console.error('[NsdbList] Error while deleting row:', e)
+		}
+	}
 </script>
 
 <template>
@@ -164,8 +276,8 @@
 				:loading="loading"
 				:error="error"
 				:columns="effectiveColumns"
+				:current-page="currentPage"
 			>
-				<!-- Default header -->
 				<div>
 					<h3 :class="classes.headerTitle">
 						{{ props.model }}
@@ -174,7 +286,7 @@
 						v-if="rows.length"
 						:class="classes.headerSubtitle"
 					>
-						{{ rows.length }} éléments
+						{{ rows.length }} éléments (page {{ currentPage }})
 					</div>
 				</div>
 			</slot>
@@ -211,7 +323,6 @@
 									:toggle-sort="() => toggleSort(column)"
 								>
 									{{ column.label }}
-									<!-- petit indicateur basique par défaut -->
 									<span v-if="sortState.key === column.key">
 										<span v-if="sortState.direction === 'asc'">▲</span>
 										<span v-else-if="sortState.direction === 'desc'">▼</span>
@@ -257,13 +368,11 @@
 
 					<!-- BODY -->
 					<template v-else>
-						<!-- Slot "body" = contrôle total sur les lignes -->
 						<slot
 							name="body"
 							:rows="sortedRows"
 							:columns="effectiveColumns"
 						>
-							<!-- Fallback par défaut -->
 							<tr
 								v-for="row in sortedRows"
 								:key="row.id ?? JSON.stringify(row)"
@@ -278,17 +387,23 @@
 										name="cell"
 										:row="row"
 										:column="column"
-										:value="column.format ? column.format(row[column.key], row) : (row[column.key] ?? 'Inconnu')"
+										:value="column.format
+											? column.format(getDeep(row, column.key), row)
+											: (getDeep(row, column.key) ?? 'Inconnu')"
 									>
-										{{ column.format ? column.format(row[column.key], row) : row[column.key] ?? 'Inconnu' }}
+										{{
+											column.format
+												? column.format(getDeep(row, column.key), row)
+												: getDeep(row, column.key) ?? 'Inconnu'
+										}}
 									</slot>
 								</td>
 
 								<td :class="classes.actionsTd">
 									<button
-										@click="nsdbModel.remove(row.id)"
-										:class="classes.deleteButton"
 										type="button"
+										@click="handleDelete(row)"
+										:class="classes.deleteButton"
 									>
 										<Icon
 											name="mdi:trash"
@@ -303,19 +418,43 @@
 			</table>
 		</div>
 
-		<!-- FOOTER -->
+		<!-- FOOTER / PAGINATION -->
 		<div :class="classes.footer">
 			<slot
 				name="footer"
 				:rows="rows"
 				:columns="effectiveColumns"
 				:model="props.model"
+				:current-page="currentPage"
+				:can-go-prev="canGoPrev"
+				:can-go-next="canGoNext"
+				:go-to-page="goToPage"
+				:prev-page="handlePrevPage"
+				:next-page="handleNextPage"
 			>
-				<div
-					v-if="rows.length"
-					class="text-sm opacity-70"
-				>
-					{{ rows.length }} éléments
+				<div class="text-sm opacity-70">
+					Page {{ currentPage }}
+					<span v-if="pageSize"> — {{ rows.length }} éléments sur cette page</span>
+				</div>
+
+				<div class="flex items-center gap-2">
+					<button
+						type="button"
+						class="px-3 py-1 rounded border text-sm disabled:opacity-40"
+						:disabled="!canGoPrev || loading"
+						@click="handlePrevPage"
+					>
+						Précédent
+					</button>
+
+					<button
+						type="button"
+						class="px-3 py-1 rounded border text-sm disabled:opacity-40"
+						:disabled="!canGoNext || loading"
+						@click="handleNextPage"
+					>
+						Suivant
+					</button>
 				</div>
 			</slot>
 		</div>

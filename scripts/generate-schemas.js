@@ -10,6 +10,11 @@ import {
 } from '../helpers/ts.js'
 import { toPascal } from '../helpers/names.js'
 
+/**
+ * Ancien helper (conservé au cas où tu en aurais besoin plus tard).
+ * Il n'est plus utilisé pour générer le schema UI, mais je le laisse
+ * pour ne pas "perdre" la fonctionnalité.
+ */
 function guessFieldKindFromTypeText(typeText) {
 	const normalizedText = String(typeText || '').toLowerCase()
 
@@ -34,6 +39,31 @@ function guessFieldKindFromTypeText(typeText) {
 		return 'string'
 	}
 	return 'unknown'
+}
+
+/**
+ * Nouveau helper : mappe le type TS (textuel) vers ton FieldType UI
+ * ('text' | 'number' | 'checkbox' | 'datetime' | 'textarea' | ...).
+ * Les enums seront forcés plus bas à 'select'.
+ */
+function guessFieldTypeForUi(typeText) {
+	const normalized = String(typeText || '').toLowerCase()
+
+	if (normalized.includes('bool')) return 'checkbox'
+	if (
+		normalized.includes('int') ||
+		normalized.includes('number') ||
+		normalized.includes('float') ||
+		normalized.includes('numeric')
+	) {
+		return 'number'
+	}
+	if (normalized.includes('timestamp') || normalized.includes('date')) {
+		return 'datetime'
+	}
+	if (normalized.includes('json')) return 'textarea'
+	// Pour le reste, on part sur du 'text' par défaut
+	return 'text'
 }
 
 function extractEnumNameFromTypeText(typeText) {
@@ -68,6 +98,70 @@ function getInsertPropertyTypeNodeText(insertType, fieldName) {
 	return typeNode.getText()
 }
 
+/**
+ * Lit la propriété `Relationships` d'une table Supabase
+ * et renvoie une liste d'objets JS :
+ * {
+ *   foreignKeyName,
+ *   columns: string[],
+ *   isOneToOne: boolean,
+ *   referencedRelation: string,
+ *   referencedColumns: string[]
+ * }
+ *
+ * ⚠️ IMPORTANT : on lit les TYPES (getTypeAtLocation + getText),
+ * pas des initializers (il n'y en a pas dans les déclarations de type).
+ */
+function getRelationshipsForTable(tableType, locationNode) {
+	const relProperty = tableType.getProperty('Relationships')
+	if (!relProperty) return []
+
+	const relType = relProperty.getTypeAtLocation(locationNode)
+	const tupleElements = relType.isTuple() ? relType.getTupleElements() : []
+
+	return tupleElements.map((elType) => {
+		const t = elType.getApparentType()
+
+		function getLiteralFromType(propName) {
+			const prop = t.getProperty(propName)
+			if (!prop) return undefined
+			const type = prop.getTypeAtLocation(locationNode)
+			const text = type.getText() // ex: '"songs_profile_id_fkey"' ou 'false'
+			return text.replace(/['"`]/g, '')
+		}
+
+		function getArrayFromType(propName) {
+			const prop = t.getProperty(propName)
+			if (!prop) return []
+			const type = prop.getTypeAtLocation(locationNode)
+			const text = type.getText() // ex: '["playlist_id"]' ou '["id"]'
+
+			const matches = []
+			const regex = /"([^"]+)"/g
+			let m
+			while ((m = regex.exec(text)) !== null) {
+				matches.push(m[1])
+			}
+			return matches
+		}
+
+		const foreignKeyName = getLiteralFromType('foreignKeyName')
+		const columns = getArrayFromType('columns')
+		const referencedRelation = getLiteralFromType('referencedRelation')
+		const referencedColumns = getArrayFromType('referencedColumns')
+		const isOneToOneText = getLiteralFromType('isOneToOne')
+		const isOneToOne = isOneToOneText === 'true'
+
+		return {
+			foreignKeyName,
+			columns,
+			isOneToOne,
+			referencedRelation,
+			referencedColumns,
+		}
+	})
+}
+
 function buildSchemaForTable(tableProperty, locationNode) {
 	const tableName = tableProperty.getName()
 	const pascalTableName = toPascal(tableName)
@@ -81,6 +175,18 @@ function buildSchemaForTable(tableProperty, locationNode) {
 
 	const rowType = rowProperty.getTypeAtLocation(locationNode)
 	const insertType = insertProperty.getTypeAtLocation(locationNode)
+
+	// 🔥 On lit les relations pour cette table
+	const relationships = getRelationshipsForTable(tableType, locationNode)
+	console.log(`🔍 Table "${tableName}" - found ${relationships.length} relationships.`)
+
+	// Map: nom de colonne locale -> descriptor de relation
+	const relationByColumn = new Map()
+	for (const rel of relationships) {
+		for (const col of rel.columns) {
+			relationByColumn.set(col, rel)
+		}
+	}
 
 	const fieldLines = []
 
@@ -105,28 +211,54 @@ function buildSchemaForTable(tableProperty, locationNode) {
 
 		const enumName = extractEnumNameFromTypeText(insertRawTypeReferenceText)
 
-		let fieldKind = guessFieldKindFromTypeText(
+		// Type UI par défaut (FieldType)
+		let uiFieldType = guessFieldTypeForUi(
 			insertFieldTypeText || rowFieldTypeText
 		)
 
-		// Si on a trouvé un enum sur Insert, on force le type à 'enum'
+		// Si on a trouvé un enum sur Insert, on force le type à 'select'
+		let optionsAttachment = ''
 		if (enumName) {
-			fieldKind = 'enum'
+			uiFieldType = 'select'
+			optionsAttachment =
+				`, options: Enums.${toPascal(enumName)}Values.map(v => ({ label: String(v), value: v }))`
 		}
 
 		const isPrimaryKey = fieldName === 'id'
 		const isReadOnlyField =
 			isPrimaryKey || ['created_at', 'updated_at', 'inserted_at'].includes(fieldName)
 
-		const enumAttachment = enumName
-			? `, enum: Enums.${toPascal(enumName)}Values`
-			: ''
+		// 🔗 Relation éventuelle pour ce champ
+		const relationDescriptor = relationByColumn.get(fieldName)
+		let relationAttachment = ''
+
+		if (relationDescriptor) {
+			// kind simple: si isOneToOne => 'hasOne', sinon 'belongsTo'
+			const kind = relationDescriptor.isOneToOne ? 'hasOne' : 'belongsTo'
+
+			uiFieldType = 'relation' // on force le type UI pour les FK
+
+			relationAttachment =
+				`, relation: {` +
+				` kind: '${kind}',` +
+				` referencedTable: '${relationDescriptor.referencedRelation}',` +
+				` localColumns: [${relationDescriptor.columns.map((c) => `'${c}'`).join(', ')}],` +
+				` referencedColumns: [${relationDescriptor.referencedColumns
+					.map((c) => `'${c}'`)
+					.join(', ')}],` +
+				` foreignKeyName: '${relationDescriptor.foreignKeyName}'` +
+				` }`
+		}
 
 		fieldLines.push(
-			`\t${fieldName}: { type: '${fieldKind}', required: ${fieldIsRequired}` +
-				`${isPrimaryKey ? ', primaryKey: true' : ''}` +
-				`${isReadOnlyField ? ', readOnly: true' : ''}` +
-				`${enumAttachment} },`
+			`\t${fieldName}: {` +
+				` label: '${fieldName}',` +
+				` type: '${uiFieldType}',` +
+				` required: ${fieldIsRequired}` +
+				`${isReadOnlyField ? ', readonly: true' : ''}` +
+				`${optionsAttachment}` +
+				`${relationAttachment}` +
+			` },`
 		)
 	}
 

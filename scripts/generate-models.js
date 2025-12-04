@@ -8,7 +8,7 @@ import {
 	loadDatabaseAlias,
 	getPublicTablesType
 } from '../helpers/ts.js'
-import { toPascal, modelHookName, storeName } from '../helpers/names.js'
+import { toPascal, modelHookName, storeName, schemaName } from '../helpers/names.js'
 
 function buildModelCode(tableName, templateContent, currentWorkingDirectory) {
 	const pascalName = toPascal(tableName)

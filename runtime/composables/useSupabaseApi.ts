@@ -1,137 +1,492 @@
 import { useSupabaseClient } from '#imports'
 
-export const useSupabaseApi = () => {
-	const supabase = useSupabaseClient?.()
+/**
+ * Direction du tri dans les requêtes.
+ */
+export type OrderDirection = 'asc' | 'desc'
 
-	if (!supabase) {
-		throw new Error('[nsdb] Supabase client not found. Did you forget to install @nuxtjs/supabase in your app?')
+/**
+ * Options pour les requêtes de liste.
+ */
+export interface ListOptions {
+	select?: string
+	orderBy?: string
+	orderDirection?: OrderDirection
+	limit?: number
+	offset?: number
+}
+
+/**
+ * Opérateur de filtre pour une clause WHERE.
+ */
+export interface WhereOperator {
+	op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'ilike' | 'in'
+	value: any
+}
+
+/**
+ * Valeur possible d'un filtre WHERE.
+ */
+export type WhereValue = any | WhereOperator | WhereOperator[]
+
+/**
+ * Map colonne -> filtre(s).
+ */
+export type WhereClause = Record<string, WhereValue>
+
+/**
+ * Options pour find / findOne.
+ */
+export interface FindOptions extends ListOptions {
+	where?: WhereClause
+}
+
+/**
+ * Applique les options de tri/pagination à une requête Supabase.
+ */
+function applyListOptions(
+	query: ReturnType<ReturnType<typeof useSupabaseClient>['from']>,
+	options: ListOptions
+) {
+	const {
+		orderBy = 'id',
+		orderDirection = 'asc',
+		limit = 100,
+		offset = 0,
+	} = options
+
+	let finalQuery = query
+	finalQuery = finalQuery.order(orderBy, { ascending: orderDirection === 'asc' })
+	finalQuery = finalQuery.range(offset, offset + limit - 1)
+
+	return finalQuery
+}
+
+/**
+ * Applique un opérateur de filtre simple sur une colonne donnée.
+ */
+function applySingleFilter(
+	query: any,
+	column: string,
+	filter: WhereOperator
+) {
+	switch (filter.op) {
+		case 'eq':
+			return query.eq(column, filter.value)
+		case 'neq':
+			return query.neq(column, filter.value)
+		case 'gt':
+			return query.gt(column, filter.value)
+		case 'gte':
+			return query.gte(column, filter.value)
+		case 'lt':
+			return query.lt(column, filter.value)
+		case 'lte':
+			return query.lte(column, filter.value)
+		case 'ilike':
+			return query.ilike(column, filter.value)
+		case 'in':
+			return query.in(column, filter.value)
+		default:
+			return query.eq(column, filter.value)
+	}
+}
+
+/**
+ * Applique un ensemble de filtres WHERE à une requête Supabase.
+ */
+function applyWhereFilters(
+	query: ReturnType<ReturnType<typeof useSupabaseClient>['from']>,
+	where?: WhereClause
+) {
+	if (!where || Object.keys(where).length === 0) {
+		return query
+	}
+
+	let finalQuery: any = query
+
+	for (const [column, rawValue] of Object.entries(where)) {
+		if (Array.isArray(rawValue)) {
+			for (const part of rawValue) {
+				if (part && typeof part === 'object' && 'op' in part) {
+					finalQuery = applySingleFilter(finalQuery, column, part as WhereOperator)
+				} else {
+					finalQuery = finalQuery.eq(column, part)
+				}
+			}
+			continue
+		}
+
+		if (rawValue && typeof rawValue === 'object' && 'op' in rawValue) {
+			finalQuery = applySingleFilter(finalQuery, column, rawValue as WhereOperator)
+			continue
+		}
+
+		finalQuery = finalQuery.eq(column, rawValue)
+	}
+
+	return finalQuery
+}
+
+/**
+ * Unifie la gestion des réponses de Supabase.
+ */
+function handleResponse<T>(
+	data: T | null,
+	error: any,
+	context: string
+) {
+	if (error) {
+		console.error(`❌ [${context}]`, error)
+		return {
+			success: false as const,
+			error,
+			data: undefined as unknown as T,
+		}
+	}
+
+	return {
+		success: true as const,
+		error: undefined,
+		data,
+	}
+}
+
+/**
+ * Interface Supabase unifiée.
+ */
+export const useSupabaseApi = () => {
+	const supabaseClient = useSupabaseClient?.()
+
+	if (!supabaseClient) {
+		throw new Error('[nsdb] Supabase client not found. Install @nuxtjs/supabase.')
 	}
 
 	// ############################################################
 	// # Basic CRUD
 	// ############################################################
 
-	async function all(
+	/**
+	 * Liste les entrées d'une table.
+	 * Supporte 2 formes :
+	 *
+	 *   all('playlists', '*', 'created_at', 'desc', 20, 0)
+	 *   all('playlists', { select: '*', orderBy: 'created_at', orderDirection: 'desc', limit: 20 })
+	 */
+	async function all<T = any>(
 		resource: string,
-		select: string = '*',
+		selectOrOptions: string | ListOptions = '*',
 		orderBy: string = 'id',
-		orderDirection: 'asc' | 'desc' = 'asc',
+		orderDirection: OrderDirection = 'asc',
 		limit: number = 100,
 		offset: number = 0
 	) {
-		const { data, error } = await supabase
-			.from(resource)
-			.select(select)
-			.order(orderBy, { ascending: orderDirection === 'asc' })
-			.range(offset, offset + limit - 1);
-		return handleResponse(data, error, `ALL ${resource}`);
+		let selectClause = '*'
+		let options: ListOptions = {}
+
+		if (typeof selectOrOptions === 'string') {
+			selectClause = selectOrOptions
+			options = { orderBy, orderDirection, limit, offset }
+		} else {
+			selectClause = selectOrOptions.select ?? '*'
+			options = {
+				orderBy: selectOrOptions.orderBy ?? orderBy,
+				orderDirection: selectOrOptions.orderDirection ?? orderDirection,
+				limit: selectOrOptions.limit ?? limit,
+				offset: selectOrOptions.offset ?? offset,
+			}
+		}
+
+		const baseQuery = supabaseClient.from(resource).select(selectClause)
+		const finalQuery = applyListOptions(baseQuery, options)
+
+		const { data, error } = await finalQuery
+		return handleResponse<T[]>(data, error, `ALL ${resource}`)
 	}
 
-	async function show(resource: string, id: string, select: string = '*') {
-		const { data, error } = await supabase
+	/**
+	 * Récupère un enregistrement via son identifiant.
+	 */
+	async function show<T = any>(
+		resource: string,
+		id: string | number,
+		select: string = '*'
+	) {
+		const { data, error } = await supabaseClient
 			.from(resource)
 			.select(select)
 			.eq('id', id)
 			.limit(1)
-			.single();
-		return handleResponse(data, error, `SHOW ${resource}/${id}`);
+			.single()
+
+		return handleResponse<T>(data, error, `SHOW ${resource}/${id}`)
 	}
 
-	async function create(resource: string, payload: any) {
-		const { data, error } = await supabase
+	/**
+	 * Crée un nouvel enregistrement.
+	 */
+	async function create<T = any>(
+		resource: string,
+		payload: any
+	) {
+		const { data, error } = await supabaseClient
 			.from(resource)
 			.insert(payload)
 			.select()
-			.single();
-		return handleResponse(data, error, `CREATE ${resource}`);
+			.single()
+
+		return handleResponse<T>(data, error, `CREATE ${resource}`)
 	}
 
-	async function update(resource: string, id: string, payload: any) {
-		const { data, error } = await supabase
+	/**
+	 * Met à jour un enregistrement.
+	 */
+	async function update<T = any>(
+		resource: string,
+		id: string | number,
+		payload: any
+	) {
+		const { data, error } = await supabaseClient
 			.from(resource)
 			.update(payload)
 			.eq('id', id)
-			.select();
-		return handleResponse(data, error, `UPDATE ${resource}/${id}`);
+			.select()
+
+		return handleResponse<T | T[]>(data, error, `UPDATE ${resource}/${id}`)
 	}
 
-	async function destroy(resource: string, id: string) {
-		const { data, error } = await supabase
+	/**
+	 * Supprime un enregistrement.
+	 */
+	async function destroy(
+		resource: string,
+		id: string | number
+	) {
+		const { data, error } = await supabaseClient
 			.from(resource)
 			.delete()
-			.eq('id', id);
-		return handleResponse(data, error, `DELETE ${resource}/${id}`);
+			.eq('id', id)
+
+		return handleResponse(data, error, `DELETE ${resource}/${id}`)
+	}
+
+	/**
+	 * Ajoute ou met à jour selon la présence d’un conflit.
+	 */
+	async function upsert<T = any>(
+		resource: string,
+		payload: any,
+		options: { onConflict?: string } = {}
+	) {
+		let query = supabaseClient
+			.from(resource)
+			.upsert(payload)
+			.select()
+
+		if (options.onConflict) {
+			query = query.onConflict(options.onConflict)
+		}
+
+		const { data, error } = await query
+		return handleResponse<T | T[]>(data, error, `UPSERT ${resource}`)
 	}
 
 	// ############################################################
 	// # Advanced CRUD
 	// ############################################################
 
-	async function allByProperty(
+	/**
+	 * Liste les entrées correspondant à une propriété donnée.
+	 * Supporte également les 2 signatures (ancienne et nouvelle).
+	 */
+	async function allByProperty<T = any>(
 		resource: string,
-		property_name: string,
-		property_value: string,
-		select: string = '*',
+		propertyName: string,
+		propertyValue: string | number,
+		selectOrOptions: string | ListOptions = '*',
 		orderBy: string = 'id',
-		orderDirection: 'asc' | 'desc' = 'asc',
+		orderDirection: OrderDirection = 'asc',
 		limit: number = 10,
 		offset: number = 0
 	) {
-		const { data, error } = await supabase
+		let selectClause = '*'
+		let options: ListOptions = {}
+
+		if (typeof selectOrOptions === 'string') {
+			selectClause = selectOrOptions
+			options = { orderBy, orderDirection, limit, offset }
+		} else {
+			selectClause = selectOrOptions.select ?? '*'
+			options = {
+				orderBy: selectOrOptions.orderBy ?? orderBy,
+				orderDirection: selectOrOptions.orderDirection ?? orderDirection,
+				limit: selectOrOptions.limit ?? limit,
+				offset: selectOrOptions.offset ?? offset,
+			}
+		}
+
+		const baseQuery = supabaseClient
 			.from(resource)
-			.select(select)
-			.eq(property_name, property_value)
-			.order(orderBy, { ascending: orderDirection === 'asc' })
-			.range(offset, offset + limit - 1);
-		return handleResponse(data, error, `ALL ${resource} WHERE ${property_name} = ${property_value}`);
+			.select(selectClause)
+			.eq(propertyName, propertyValue)
+
+		const finalQuery = applyListOptions(baseQuery, options)
+		const { data, error } = await finalQuery
+
+		return handleResponse<T[]>(data, error, `ALL ${resource} WHERE ${propertyName} = ${propertyValue}`)
 	}
 
-	async function showByProperty(
+	/**
+	 * Récupère un enregistrement via une propriété donnée.
+	 */
+	async function showByProperty<T = any>(
 		resource: string,
-		property_name: string,
-		property_value: string,
+		propertyName: string,
+		propertyValue: string | number,
 		select: string = '*'
 	) {
-		const { data, error } = await supabase
+		const { data, error } = await supabaseClient
 			.from(resource)
 			.select(select)
-			.eq(property_name, property_value)
+			.eq(propertyName, propertyValue)
 			.limit(1)
-			.single();
-		return handleResponse(data, error, `SHOW ${resource} WHERE ${property_name} = ${property_value}`);
+			.single()
+
+		return handleResponse<T>(data, error, `SHOW ${resource} WHERE ${propertyName} = ${propertyValue}`)
 	}
 
-	async function updateByProperty(
+	/**
+	 * Met à jour des enregistrements filtrés par une propriété.
+	 */
+	async function updateByProperty<T = any>(
 		resource: string,
-		property_name: string,
-		property_value: string,
+		propertyName: string,
+		propertyValue: string | number,
 		payload: any
 	) {
-		const { data, error } = await supabase
+		const { data, error } = await supabaseClient
 			.from(resource)
 			.update(payload)
-			.eq(property_name, property_value);
-		return handleResponse(data, error, `UPDATE ${resource} WHERE ${property_name} = ${property_value}`);
+			.eq(propertyName, propertyValue)
+			.select()
+
+		return handleResponse<T | T[]>(data, error, `UPDATE ${resource} WHERE ${propertyName} = ${propertyValue}`)
 	}
 
-	async function count(resource: string) {
-		const { count, error } = await supabase
+	/**
+	 * Supprime des enregistrements filtrés par une propriété.
+	 */
+	async function deleteByProperty(
+		resource: string,
+		propertyName: string,
+		propertyValue: string | number
+	) {
+		const { data, error } = await supabaseClient
 			.from(resource)
-			.select('*', { count: 'exact' });
-		return handleResponse(count, error, `COUNT ${resource}`);
+			.delete()
+			.eq(propertyName, propertyValue)
+
+		return handleResponse(data, error, `DELETE ${resource} WHERE ${propertyName} = ${propertyValue}`)
 	}
 
-	// ############################################################
-	// # Common functions
-	// ############################################################
+	/**
+	 * Compte tous les enregistrements, ou seulement ceux filtrés.
+	 */
+	async function count(
+		resource: string,
+		where?: { property: string; value: string | number }
+	) {
+		let query = supabaseClient
+			.from(resource)
+			.select('*', { count: 'exact', head: true })
 
-	function handleResponse(data: any, error: any, context: string = 'Request') {
-		if (error) {
-			console.error(`❌ [${context}]`, error);
-			return { success: false, error };
+		if (where) {
+			query = query.eq(where.property, where.value)
 		}
-		return { success: true, data };
+
+		const { count, error } = await query
+		return handleResponse<number | null>(count ?? null, error, `COUNT ${resource}`)
 	}
+
+	// ############################################################
+	// # FIND helpers (where + select + order + pagination)
+	// ############################################################
+
+	/**
+	 * Recherche avancée avec where + tri + pagination.
+	 *
+	 * Exemple simple :
+	 *   find('songs', { where: { profile_id: myProfileId } })
+	 *
+	 * Exemple avec opérateurs :
+	 *   find('songs', {
+	 *     where: {
+	 *       profile_id: { op: 'eq', value: myProfileId },
+	 *       created_at: { op: 'gte', value: '2025-01-01' },
+	 *       title: { op: 'ilike', value: '%lofi%' },
+	 *     },
+	 *     orderBy: 'created_at',
+	 *     orderDirection: 'desc',
+	 *     limit: 50,
+	 *   })
+	 */
+	async function find<T = any>(
+		resource: string,
+		options: FindOptions
+	) {
+		const {
+			select = '*',
+			where,
+			orderBy,
+			orderDirection,
+			limit,
+			offset,
+		} = options
+
+		const baseQuery = supabaseClient
+			.from(resource)
+			.select(select)
+
+		const queryWithWhere = applyWhereFilters(baseQuery, where)
+
+		const queryWithOptions = applyListOptions(queryWithWhere, {
+			orderBy,
+			orderDirection,
+			limit,
+			offset,
+		})
+
+		const { data, error } = await queryWithOptions
+		return handleResponse<T[]>(data, error, `FIND ${resource}`)
+	}
+
+	/**
+	 * Variante de find qui retourne un seul enregistrement.
+	 */
+	async function findOne<T = any>(
+		resource: string,
+		options: FindOptions
+	) {
+		const {
+			select = '*',
+			where,
+		} = options
+
+		const baseQuery = supabaseClient
+			.from(resource)
+			.select(select)
+
+		const queryWithWhere = applyWhereFilters(baseQuery, where)
+		const { data, error } = await queryWithWhere
+			.limit(1)
+			.single()
+
+		return handleResponse<T>(data, error, `FIND ONE ${resource}`)
+	}
+
+	// ############################################################
+	// # Exposed API
+	// ############################################################
 
 	return {
 		all,
@@ -139,9 +494,16 @@ export const useSupabaseApi = () => {
 		create,
 		update,
 		destroy,
-		count,
+		upsert,
+
 		allByProperty,
 		showByProperty,
-		updateByProperty
-	};
-};
+		updateByProperty,
+		deleteByProperty,
+
+		count,
+
+		find,
+		findOne,
+	}
+}

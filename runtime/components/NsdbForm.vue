@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels' // ⬅️ util à créer (voir plus haut)
+import NsdbRelationSelect from './Form/NsdbRelationSelect.vue'
+import type { EntityRelation } from '@lucashw68/nsdb/types/entities'
 
 type NsdbFormMode = 'create' | 'edit'
 
@@ -28,6 +30,99 @@ const emit = defineEmits<{
 const nsdbModel = useNsdbModel(props.model, { store: false })
 const nsdbSchema = nsdbModel.schema
 
+// ------------------------
+// Modèles liés (belongsTo)
+// ------------------------
+
+type NsdbAnyModel = ReturnType<typeof useNsdbModel<any>>
+
+const relatedModels: Record<string, NsdbAnyModel> = {}
+
+if (nsdbSchema && typeof nsdbSchema === 'object') {
+	for (const def of Object.values(nsdbSchema as Record<string, any>)) {
+		if (def?.type === 'relation' && def.relation && def.relation.kind === 'belongsTo') {
+			const relation = def.relation as EntityRelation
+			const table = relation.referencedTable
+			if (!relatedModels[table]) {
+				try {
+					relatedModels[table] = useNsdbModel(table, { store: false }) as NsdbAnyModel
+				} catch (e) {
+					console.warn('[NsdbForm] Impossible d’initialiser le modèle lié pour', table, e)
+				}
+			}
+		}
+	}
+}
+
+function splitInitialValuesByRelation(
+	initialValues: Record<string, any> | undefined,
+	schema: Record<string, any> | undefined
+) {
+	const root: Record<string, any> = {}
+	const perRelation: Record<string, Record<string, any>> = {}
+
+	if (!initialValues || !schema) {
+		return { root, perRelation }
+	}
+
+	for (const [fullKey, value] of Object.entries(initialValues)) {
+		// pas de point → champ de l’entité principale
+		if (!fullKey.includes('.')) {
+			root[fullKey] = value
+			continue // 👈 AVANT c'était `return` → bug
+		}
+
+		const [prefix, childKey] = fullKey.split('.', 2)
+		if (!childKey) continue
+
+		let relationFieldKey: string | null = null
+
+		// 1) le prefix correspond directement à un champ relation
+		if (schema[prefix]?.type === 'relation') {
+			relationFieldKey = prefix
+		} else {
+			// 2) sinon, on regarde si le prefix correspond à la table référencée
+			for (const [fieldKey, fieldDef] of Object.entries(schema)) {
+				if (
+					fieldDef?.type === 'relation' &&
+					fieldDef.relation?.referencedTable &&
+					fieldDef.relation.referencedTable.replace(/s$/i, '') === prefix.replace(/s$/i, '')
+				) {
+					relationFieldKey = fieldKey
+					break
+				}
+			}
+		}
+
+		if (!relationFieldKey) {
+			console.warn(
+				'[NsdbForm] initialValues: impossible de résoudre la relation pour la clé',
+				fullKey
+			)
+			continue
+		}
+
+		if (!perRelation[relationFieldKey]) {
+			perRelation[relationFieldKey] = {}
+		}
+		perRelation[relationFieldKey][childKey] = value
+	}
+
+	return { root, perRelation }
+}
+
+const parsedInitialValues = computed(() =>
+	splitInitialValuesByRelation(props.initialValues ?? {}, nsdbSchema as any)
+)
+
+const rootInitialValues = computed(
+	() => parsedInitialValues.value?.root ?? {}
+)
+
+const relationInitialValues = computed(
+	() => parsedInitialValues.value?.perRelation ?? {}
+)
+
 const mode = computed<NsdbFormMode>(() => (props.id != null ? 'edit' : 'create'))
 
 const loading = ref(false)
@@ -39,12 +134,11 @@ const form = ref<Record<string, any>>({})
 const hiddenFieldsSet = computed(() => new Set(props.hideFields ?? []))
 
 function initForm() {
-	// base depuis le DX handle (`new()` du modèle) si dispo
 	const base = typeof nsdbModel.new === 'function' ? nsdbModel.new() : {}
 
 	form.value = {
 		...base,
-		...(props.initialValues || {}),
+		...(rootInitialValues.value || {}),
 	}
 }
 
@@ -183,14 +277,102 @@ function applyValidationErrors(validationErrors: Record<string, string[]>) {
 	error.value = 'Certains champs obligatoires sont manquants.'
 }
 
-function buildPayload(): Record<string, any> {
+async function resolveRelationsAndBuildPayload(): Promise<Record<string, any>> {
 	const payload: Record<string, any> = {}
+	const relationCreationPromises: Promise<void>[] = []
 
 	for (const [key, value] of Object.entries(form.value)) {
-		const def = nsdbSchema[key]
-		// on ignore les champs readOnly / primaryKey
-		if (def?.readOnly || def?.primaryKey) continue
+		const def = nsdbSchema?.[key]
+
+		// ignore readonly
+		if (def?.readonly || def?.primaryKey) continue
+
+		// ------------------------
+		// Champ relation
+		// ------------------------
+		if (def?.type === 'relation' && def.relation) {
+			const relation = def.relation
+			const table = relation.referencedTable
+
+			// Cas simple : valeur primitive = FK existante
+			if (
+				value === null ||
+				typeof value === 'string' ||
+				typeof value === 'number'
+			) {
+				payload[key] = value
+				continue
+			}
+
+			// Cas inline-create
+			if (value && typeof value === 'object' && (value as any).__nsdbInlineCreate) {
+				const inline = value as any
+				const model = (nsdbModel.relatedModels?.[table] ?? null) || null
+
+				if (!model || typeof model.create !== 'function') {
+					console.warn(
+						'[NsdbForm] Aucun DX handle lié pour la table',
+						table,
+						'→ impossible de créer inline.'
+					)
+					continue
+				}
+
+				relationCreationPromises.push(
+					(async () => {
+						// point de départ : data remontée par le composant relation
+						const childData: Record<string, any> = {
+							...(inline.data || {}),
+						}
+
+						// 1) defaults nested depuis initialValues : ex. "playlist.profile_id"
+						const childDefaults = relationInitialValues.value[key]
+						if (childDefaults) {
+							for (const [childKey, defaultValue] of Object.entries(childDefaults)) {
+								if (childData[childKey] == null) {
+									childData[childKey] = defaultValue
+								}
+							}
+						}
+
+						// 2) création de l’entité liée
+						const created = await model.create(childData)
+						if (!created) {
+							throw new Error(
+								`[nsdb] Échec de la création liée pour ${table}`
+							)
+						}
+
+						// 3) récupération de la PK référencée
+						const pkColumn = relation.referencedColumns?.[0] ?? 'id'
+						const createdId = (created as any)?.[pkColumn]
+
+						if (!createdId) {
+							console.warn(
+								`[NsdbForm] Impossible de récupérer la PK (${pkColumn}) sur l’entité créée de ${table}.`
+							)
+						}
+
+						payload[key] = createdId
+					})()
+				)
+
+				continue
+			}
+
+			// Valeur non gérée → on la passe telle quelle
+			payload[key] = value
+			continue
+		}
+
+		// ------------------------
+		// Champ "normal"
+		// ------------------------
 		payload[key] = value
+	}
+
+	if (relationCreationPromises.length) {
+		await Promise.all(relationCreationPromises)
 	}
 
 	return payload
@@ -198,10 +380,10 @@ function buildPayload(): Record<string, any> {
 
 async function submitToModel(payload: Record<string, any>): Promise<any> {
 	if (mode.value === 'create') {
-		if (typeof nsdbModel.add !== 'function') {
-			throw new Error('Le nsdb model ne définit pas de méthode add().')
+		if (typeof nsdbModel.create !== 'function') {
+			throw new Error('Le nsdb model ne définit pas de méthode create().')
 		}
-		const result = await nsdbModel.add(payload)
+		const result = await nsdbModel.create(payload)
 		emit('created', result)
 		return result
 	}
@@ -210,10 +392,10 @@ async function submitToModel(payload: Record<string, any>): Promise<any> {
 	if (props.id == null) {
 		throw new Error('Impossible de mettre à jour : aucun id fourni.')
 	}
-	if (typeof nsdbModel.patch !== 'function') {
-		throw new Error('Le DX handle ne définit pas de méthode patch().')
+	if (typeof nsdbModel.edit !== 'function') {
+		throw new Error('Le DX handle ne définit pas de méthode edit().')
 	}
-	const result = await nsdbModel.patch(props.id, payload)
+	const result = await nsdbModel.edit(props.id, payload)
 	emit('updated', result)
 	return result
 }
@@ -249,8 +431,8 @@ async function onSubmit() {
 	saving.value = true
 
 	try {
-		// 4. Construction du payload filtré
-		const payload = buildPayload()
+		// 4. Construction du payload + résolution des créations liées
+		const payload = await resolveRelationsAndBuildPayload()
 
 		// 5. Soumission au DX handle (add / patch)
 		const result = await submitToModel(payload)
@@ -312,7 +494,7 @@ async function onSubmit() {
 				</label>
 
 				<input
-					v-if="nsdbSchema[key]?.type === 'string'"
+					v-if="nsdbSchema[key]?.type === 'text'"
 					type="text"
 					class="border text-black rounded px-3 py-2 w-full text-sm"
 					:value="form[key] ?? ''"
@@ -321,34 +503,59 @@ async function onSubmit() {
 					@input="setField(key, ($event.target as HTMLInputElement).value)"
 				/>
 
+				<input
+					v-if="nsdbSchema[key]?.type === 'number'"
+					type="number"
+					class="border text-black rounded px-3 py-2 w-full text-sm"
+					:value="form[key] ?? ''"
+					:disabled="loading || saving"
+					placeholder="Entrez une valeur"
+					@input="setField(key, Number(($event.target as HTMLInputElement).value))"
+				/>
+
 				<select
-					v-else-if="nsdbSchema[key]?.type === 'enum'"
+					v-else-if="nsdbSchema[key]?.type === 'select'"
 					class="border text-black rounded px-3 py-2 w-full text-sm"
 					:value="form[key] ?? ''"
 					:disabled="loading || saving"
 					@change="setField(key, ($event.target as HTMLSelectElement).value)"
 				>
-					<option value="" disabled selected>Sélectionnez une option</option>
+					<p>SELECT</p>
+					<option value="" disabled>Sélectionnez une option</option>
 					<option
-						v-for="enumValue in nsdbSchema[key]?.enum || []"
-						:key="enumValue"
-						:value="enumValue"
+						v-for="opt in nsdbSchema[key]?.options || []"
+						:key="opt.value"
+						:value="opt.value"
 					>
-						{{ enumValue }}
+						{{ opt.label }}
 					</option>
 				</select>
 
-				<div v-else-if="nsdbSchema[key]?.type === 'boolean'" class="flex items-center gap-2">
-				    <input
+				<div
+					v-else-if="nsdbSchema[key]?.type === 'checkbox'"
+					class="flex items-center gap-2"
+				>
+					<input
 						type="checkbox"
 						:id="`checkbox-${key}`"
 						:name="key"
-						:checked="form[key] ?? false" 
+						:checked="!!form[key]"
+						:disabled="loading || saving"
+						@change="setField(key, ($event.target as HTMLInputElement).checked)"
 					/>
-						<label :for="`checkbox-${key}`">
-							{{ labels?.find(l => l.key === key)?.label || key }}
-						</label>
+					<label :for="`checkbox-${key}`">
+						{{ labels?.find(l => l.key === key)?.label || key }}
+					</label>
 				</div>
+
+				<!-- RELATION : utilise NsdbRelationSelect basé sur le schema -->
+				<NsdbRelationSelect
+					v-else-if="nsdbSchema?.[key]?.type === 'relation' && nsdbSchema[key]?.relation"
+					:relation="nsdbSchema[key].relation"
+					:value="form[key] ?? null"
+					:disabled="loading || saving || nsdbSchema[key]?.readonly"
+					@update:value="setField(key, $event)"
+				/>
 
 				<p
 					v-if="fieldErrors[key]?.length"

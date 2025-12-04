@@ -13,3 +13,4 @@ export const singular = (s) => (
 
 export const modelHookName = (table) => `use${toPascal(table)}`
 export const storeName = (table) => `use${toPascal(singular(table))}Store`
+export const schemaName = (table) => `${toPascal(singular(table))}Schema`
