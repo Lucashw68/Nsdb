@@ -23,34 +23,93 @@ type Options<T> =
 export interface ModelQuery {
 	select?: string
 	where?: WhereClause
+	/**
+	 * Ex:
+	 * - "created_at"
+	 * - { created_at: "desc" }
+	 * - { "book.title": "asc" }  // relation order (requires useSupabaseApi support)
+	 */
 	orderBy?: string | Record<string, OrderDirection>
 	limit?: number
 	offset?: number
 }
 
 /**
- * Normalise un orderBy pour en extraire : colonne + direction.
- * - "created_at"          -> { orderBy: "created_at", orderDirection: "asc" }
- * - { created_at: "desc"} -> { orderBy: "created_at", orderDirection: "desc" }
+ * Résultat normalisé pour l'order.
+ * - orderBy          : colonne (sans table) OU brut si pas de relation
+ * - orderDirection   : 'asc' | 'desc'
+ * - orderForeignTable: si order relationnel (ex: 'book' pour 'book.title')
  */
-function normalizeOrder(
-	rawOrderBy: ModelQuery['orderBy']
-): { orderBy: string; orderDirection: OrderDirection } {
+type NormalizedOrder = {
+	orderBy: string
+	orderDirection: OrderDirection
+	orderForeignTable?: string
+}
+
+/**
+ * Normalise un orderBy pour en extraire : colonne + direction (+ foreignTable optionnel).
+ *
+ * Supporte :
+ * - "created_at"
+ * - { created_at: "desc" }
+ * - "book.title"
+ * - { "book.title": "asc" }
+ *
+ * NOTE: le support réel de foreignTable nécessite `useSupabaseApi` (order(..., { foreignTable })).
+ */
+function normalizeOrder(rawOrderBy: ModelQuery['orderBy']): NormalizedOrder {
 	let orderBy = 'id'
 	let orderDirection: OrderDirection = 'asc'
+	let orderForeignTable: string | undefined = undefined
 
+	// 1) string form
 	if (typeof rawOrderBy === 'string') {
-		orderBy = rawOrderBy
-	} else if (rawOrderBy && typeof rawOrderBy === 'object') {
-		const [column, direction] = Object.entries(rawOrderBy)[0] as [
+		const parsed = parseOrderPath(rawOrderBy)
+		orderBy = parsed.column
+		orderForeignTable = parsed.foreignTable
+		return { orderBy, orderDirection, orderForeignTable }
+	}
+
+	// 2) object form
+	if (rawOrderBy && typeof rawOrderBy === 'object') {
+		const [rawColumn, direction] = Object.entries(rawOrderBy)[0] as [
 			string,
 			OrderDirection | undefined
 		]
-		orderBy = column
+		const parsed = parseOrderPath(rawColumn)
+
+		orderBy = parsed.column
+		orderForeignTable = parsed.foreignTable
 		orderDirection = direction ?? 'asc'
+
+		return { orderBy, orderDirection, orderForeignTable }
 	}
 
-	return { orderBy, orderDirection }
+	return { orderBy, orderDirection, orderForeignTable }
+}
+
+/**
+ * Parse une clé d'orderBy potentiellement relationnelle.
+ * - "created_at"  => { column: "created_at" }
+ * - "book.title"  => { foreignTable: "book", column: "title" }
+ *
+ * Heuristique volontairement simple:
+ * - 0 ou 1 "." : supporté
+ * - >1 "." : on garde brut dans column (et foreignTable undefined), à améliorer plus tard si besoin.
+ */
+function parseOrderPath(path: string): { foreignTable?: string; column: string } {
+	if (!path.includes('.')) {
+		return { column: path }
+	}
+
+	const parts = path.split('.').filter(Boolean)
+	if (parts.length === 2) {
+		const [foreignTable, column] = parts
+		return { foreignTable, column }
+	}
+
+	// cas complexe non supporté proprement pour l'instant
+	return { column: path }
 }
 
 /**
@@ -83,7 +142,6 @@ export function useSupabaseModel<TRow>(
 		return {
 			items: store.items as Ref<TRow[]>,
 
-			// On uniformise l'API sur async pour getById
 			getById: async (id: string | number) =>
 				(store.getById(id) as TRow | null) ?? null,
 
@@ -96,7 +154,6 @@ export function useSupabaseModel<TRow>(
 
 			remove: store.remove as (id: string | number) => void | Promise<void>,
 
-			// On délègue entièrement la logique de query aux stores
 			fetch: async (query?: ModelQuery) =>
 				(await store.fetchFromSupabase(query)) as TRow[],
 
@@ -113,52 +170,25 @@ export function useSupabaseModel<TRow>(
 	return {
 		items,
 
-		/**
-		 * Récupère un enregistrement par son id.
-		 */
 		getById: async (id: string | number, select: string = '*') => {
 			const response = await api.show<TRow>(modelName, id, select)
 			return (response.data ?? null) as TRow | null
 		},
 
-		/**
-		 * Crée un nouvel enregistrement.
-		 */
 		create: async (payload: Partial<TRow>) => {
 			const response = await api.create<TRow>(modelName, payload)
 			return (response.data ?? null) as TRow | null
 		},
 
-		/**
-		 * Met à jour un enregistrement.
-		 */
 		update: async (id: string | number, payload: Partial<TRow>) => {
-			const response = await api.update<TRow>(modelName, id, payload)
+			const response = await api.update<TRow>(modelName, payload)
 			return (response.data ?? null) as TRow | null
 		},
 
-		/**
-		 * Supprime un enregistrement.
-		 */
 		remove: async (id: string | number) => {
 			await api.destroy(modelName, id)
 		},
 
-		/**
-		 * Fetch liste d'éléments depuis Supabase.
-		 *
-		 * - Si `query.where` est présent → utilise `api.find`
-		 * - Sinon → utilise `api.all`
-		 *
-		 * Exemple :
-		 *   fetch()
-		 *   fetch({ select: '*, profile:profiles(*)' })
-		 *   fetch({
-		 *     where: { profile_id: { op: 'eq', value: profileId } },
-		 *     orderBy: { created_at: 'desc' },
-		 *     limit: 50,
-		 *   })
-		 */
 		fetch: async (query: ModelQuery = {}) => {
 			const {
 				select = '*',
@@ -167,32 +197,31 @@ export function useSupabaseModel<TRow>(
 				offset = 0,
 			} = query
 
-			const { orderBy, orderDirection } = normalizeOrder(query.orderBy)
+			const { orderBy, orderDirection, orderForeignTable } = normalizeOrder(query.orderBy)
 
 			let data: TRow[] = []
 
-			// Avec filtre -> api.find
 			if (where && Object.keys(where).length > 0) {
 				const response = await api.find<TRow>(modelName, {
 					select,
 					where,
 					orderBy,
 					orderDirection,
+					orderForeignTable, // NEW
 					limit,
 					offset,
-				})
+				} as any)
 
 				data = (response.data ?? []) as TRow[]
-			}
-			// Sans filtre -> api.all
-			else {
+			} else {
 				const response = await api.all<TRow>(modelName, {
 					select,
 					orderBy,
 					orderDirection,
+					orderForeignTable, // NEW
 					limit,
 					offset,
-				})
+				} as any)
 
 				data = (response.data ?? []) as TRow[]
 			}
@@ -201,9 +230,6 @@ export function useSupabaseModel<TRow>(
 			return items.value
 		},
 
-		/**
-		 * Pas de sync en mode API (placeholder).
-		 */
 		sync: () => {},
 	}
 }

@@ -1,55 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, useSlots } from 'vue'
 import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels'
-
-console.warn('[NsdbList] UPDATED PAGINATED VERSION WITH VARIANT + RENDERLESS')
 
 type Column = {
   key: string
   label: string
-  format?: (value: any, row: any) => string
-}
-
-type NsdbTableClasses = {
-  wrapper: string
-  headerWrapper: string
-  headerTitle: string
-  headerSubtitle: string
-  error: string
-  tableContainer: string
-  table: string
-  thead: string
-  theadRow: string
-  th: string
-  actionsTh: string
-  loadingCell: string
-  emptyCell: string
-  bodyRow: string
-  td: string
-  actionsTd: string
-  deleteButton: string
-  footer: string
-}
-
-const defaultClasses: NsdbTableClasses = {
-  wrapper: 'w-full space-y-3',
-  headerWrapper: 'flex items-center justify-between',
-  headerTitle: 'text-lg font-semibold capitalize mb-2',
-  headerSubtitle: 'text-sm opacity-70',
-  error: 'text-sm text-red-600',
-  tableContainer: 'border w-full overflow-x-auto',
-  table: 'nsdb-table w-full text-sm',
-  thead: 'bg-gray-50',
-  theadRow: 'border-2 border-white',
-  th: 'text-left text-black px-4 py-2 font-bold hover:cursor-pointer hover:text-purple-500 hover:bg-gray-200 hover:rounded-lg',
-  actionsTh: 'text-black',
-  loadingCell: 'px-4 py-6 text-center',
-  emptyCell: 'px-4 py-6 text-center',
-  bodyRow: 'border-t hover:bg-gray-400 hover:cursor-pointer',
-  td: 'py-2 px-4 text-center border-2 border-white',
-  actionsTd: 'flex items-center gap-2 py-2 px-4 justify-center',
-  deleteButton: 'flex items-center rounded-full hover:bg-gray-600 px-2 py-1',
-  footer: 'w-full flex justify-between items-center mt-2',
+  format?: (value: any, row: any) => any
 }
 
 const props = defineProps<{
@@ -57,10 +13,22 @@ const props = defineProps<{
   columns?: Column[]
   pageSize?: number
   query?: any
-  classes?: Partial<NsdbTableClasses>
-  unstyled?: boolean
-  variant?: 'table' | 'cards'
+  /**
+   * Built-in variants:
+   * - "table" (default)
+   * - "list"
+   *
+   * Custom variants:
+   * - any string + slot du même nom (#cards, #compact, etc.)
+   */
+  variant?: string
 }>()
+
+const slots = useSlots()
+
+// -----------------------------------------------------
+// State & logic
+// -----------------------------------------------------
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -82,21 +50,6 @@ const currentPage = ref(1)
 const pageSize = computed(() => {
   if (props.pageSize != null) return props.pageSize
   return undefined
-})
-
-const classes = computed<NsdbTableClasses>(() => {
-  if (props.unstyled) {
-    return Object.keys(defaultClasses).reduce((acc, key) => {
-      // @ts-expect-error: key est bien une clé de NsdbTableClasses
-      acc[key] = ''
-      return acc
-    }, {} as NsdbTableClasses)
-  }
-
-  return {
-    ...defaultClasses,
-    ...(props.classes ?? {}),
-  }
 })
 
 const canGoPrev = computed(() => currentPage.value > 1)
@@ -145,12 +98,12 @@ async function goToPage(page: number) {
   await load()
 }
 
-async function handlePrevPage() {
+async function prevPage() {
   if (!canGoPrev.value) return
   await goToPage(currentPage.value - 1)
 }
 
-async function handleNextPage() {
+async function nextPage() {
   if (!canGoNext.value) return
   await goToPage(currentPage.value + 1)
 }
@@ -180,20 +133,6 @@ const effectiveColumns = computed<Column[]>(() => {
   return Object.keys(first).map(key => ({ key, label: key }))
 })
 
-function toggleSort(column: Column) {
-  if (sortState.value.key !== column.key) {
-    sortState.value = { key: column.key, direction: 'asc' }
-    return
-  }
-
-  if (sortState.value.direction === 'asc') {
-    sortState.value = { key: column.key, direction: 'desc' }
-    return
-  }
-
-  sortState.value = { key: null, direction: null }
-}
-
 function getDeep(row: any, path: unknown) {
   if (!row || path == null) return null
 
@@ -222,6 +161,20 @@ function getDeep(row: any, path: unknown) {
   return current
 }
 
+function toggleSort(column: Column) {
+  if (sortState.value.key !== column.key) {
+    sortState.value = { key: column.key, direction: 'asc' }
+    return
+  }
+
+  if (sortState.value.direction === 'asc') {
+    sortState.value = { key: column.key, direction: 'desc' }
+    return
+  }
+
+  sortState.value = { key: null, direction: null }
+}
+
 const sortedRows = computed(() => {
   const base = [...rows.value]
 
@@ -244,7 +197,7 @@ const sortedRows = computed(() => {
   })
 })
 
-async function handleDelete(row: any) {
+async function deleteRow(row: any) {
   const id = row?.id
   if (id == null) return
 
@@ -258,313 +211,285 @@ async function handleDelete(row: any) {
       return
     }
 
-    // On recharge la page courante après suppression
     await load()
   } catch (e) {
     console.error('[NsdbList] Error while deleting row:', e)
   }
 }
+
+// -----------------------------------------------------
+// Variant resolution
+// -----------------------------------------------------
+
+const variantName = computed(() => props.variant ?? 'table')
+
+const slotProps = computed(() => ({
+  model: props.model,
+  rows: sortedRows.value,
+  rawRows: rows.value,
+  columns: effectiveColumns.value,
+  loading: loading.value,
+  error: error.value,
+  currentPage: currentPage.value,
+  pageSize: pageSize.value,
+  canGoPrev: canGoPrev.value,
+  canGoNext: canGoNext.value,
+  goToPage,
+  prevPage,
+  nextPage,
+  deleteRow,
+  sortState: sortState.value,
+  toggleSort,
+  getDeep,
+}))
+
+const hasDefaultSlot = computed(() => !!slots.default)
+const hasVariantSlot = computed(
+  () => !!slots[variantName.value as keyof typeof slots],
+)
 </script>
 
 <template>
-  <!-- 🔧 Renderless default slot: expose all data / actions -->
+  <!-- 1. Full custom: v-slot="list" -->
   <slot
-    :model="props.model"
-    :rows="sortedRows"
-    :raw-rows="rows"
-    :columns="effectiveColumns"
-    :loading="loading"
-    :error="error"
-    :current-page="currentPage"
-    :page-size="pageSize"
-    :can-go-prev="canGoPrev"
-    :can-go-next="canGoNext"
-    :go-to-page="goToPage"
-    :prev-page="handlePrevPage"
-    :next-page="handleNextPage"
-    :delete-row="handleDelete"
+    v-if="hasDefaultSlot"
+    v-bind="slotProps"
+  />
+
+  <!-- 2. App custom variant: <template #cards="list"> -->
+  <slot
+    v-else-if="hasVariantSlot"
+    :name="variantName"
+    v-bind="slotProps"
+  />
+
+  <!-- 3. Built-in TABLE variant -->
+  <div
+    v-else-if="variantName === 'table'"
+    class="w-full space-y-3"
   >
-    <!-- 🔽 Default layout (table/cards) -->
-    <div :class="classes.wrapper">
-      <!-- HEADER -->
-      <div :class="classes.headerWrapper">
-        <slot
-          name="header"
-          :model="props.model"
-          :rows="rows"
-          :loading="loading"
-          :error="error"
-          :columns="effectiveColumns"
-          :current-page="currentPage"
-        >
-          <div>
-            <h3 :class="classes.headerTitle">
-              {{ props.model }}
-            </h3>
-            <div
-              v-if="rows.length"
-              :class="classes.headerSubtitle"
-            >
-              {{ rows.length }} éléments (page {{ currentPage }})
-            </div>
-          </div>
-        </slot>
-      </div>
-
-      <!-- ERROR -->
-      <slot
-        name="error"
-        v-if="error"
-        :error="error"
-      >
-        <div :class="classes.error">
-          {{ error }}
-        </div>
-      </slot>
-
-      <!-- CONTENT -->
-      <!-- 🃏 CARDS VARIANT -->
-      <div v-if="props.variant === 'cards'">
-        <!-- LOADING -->
-        <template v-if="loading">
-          <slot name="loading" :columns="effectiveColumns">
-            <div :class="classes.loadingCell">
-              Chargement…
-            </div>
-          </slot>
-        </template>
-
-        <!-- EMPTY -->
-        <template v-else-if="sortedRows.length === 0">
-          <slot name="empty" :columns="effectiveColumns">
-            <div :class="classes.emptyCell">
-              Aucun résultat
-            </div>
-          </slot>
-        </template>
-
-        <!-- CARDS -->
-        <template v-else>
-          <slot
-            name="cards"
-            :rows="sortedRows"
-            :columns="effectiveColumns"
-          >
-            <div class="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              <div
-                v-for="row in sortedRows"
-                :key="row.id ?? JSON.stringify(row)"
-                class="border rounded-lg p-4 shadow-sm bg-white"
-              >
-                <slot
-                  name="card"
-                  :row="row"
-                  :columns="effectiveColumns"
-                >
-                  <div
-                    v-for="column in effectiveColumns"
-                    :key="column.key"
-                    class="text-sm text-black mb-1"
-                  >
-                    <span class="font-semibold mr-1">
-                      {{ column.label }}:
-                    </span>
-                    <span>
-                      {{
-                        column.format
-                          ? column.format(getDeep(row, column.key), row)
-                          : getDeep(row, column.key) ?? 'Inconnu'
-                      }}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    class="mt-2 text-xs text-red-500 underline"
-                    @click="handleDelete(row)"
-                  >
-                    Supprimer
-                  </button>
-                </slot>
-              </div>
-            </div>
-          </slot>
-        </template>
-      </div>
-
-      <!-- 📊 TABLE VARIANT (default) -->
-      <div
-        v-else
-        :class="classes.tableContainer"
-      >
-        <table :class="classes.table">
-          <thead :class="classes.thead">
-            <slot name="thead" :columns="effectiveColumns">
-              <tr :class="classes.theadRow">
-                <th
-                  v-for="column in effectiveColumns"
-                  :key="column.key"
-                  :class="classes.th"
-                  @click="toggleSort(column)"
-                >
-                  <slot
-                    name="th"
-                    :column="column"
-                    :sort-key="sortState.key"
-                    :sort-direction="sortState.direction"
-                    :toggle-sort="() => toggleSort(column)"
-                  >
-                    {{ column.label }}
-                    <span v-if="sortState.key === column.key">
-                      <span v-if="sortState.direction === 'asc'">▲</span>
-                      <span v-else-if="sortState.direction === 'desc'">▼</span>
-                    </span>
-                  </slot>
-                </th>
-
-                <th :class="classes.actionsTh">
-                  Actions
-                </th>
-              </tr>
-            </slot>
-          </thead>
-
-          <tbody>
-            <!-- LOADING -->
-            <template v-if="loading">
-              <slot name="loading" :columns="effectiveColumns">
-                <tr>
-                  <td
-                    :colspan="effectiveColumns.length || 1"
-                    :class="classes.loadingCell"
-                  >
-                    Chargement…
-                  </td>
-                </tr>
-              </slot>
-            </template>
-
-            <!-- EMPTY -->
-            <template v-else-if="sortedRows.length === 0">
-              <slot name="empty" :columns="effectiveColumns">
-                <tr>
-                  <td
-                    :colspan="effectiveColumns.length || 1"
-                    :class="classes.emptyCell"
-                  >
-                    Aucun résultat
-                  </td>
-                </tr>
-              </slot>
-            </template>
-
-            <!-- BODY -->
-            <template v-else>
-              <slot
-                name="body"
-                :rows="sortedRows"
-                :columns="effectiveColumns"
-              >
-                <tr
-                  v-for="row in sortedRows"
-                  :key="row.id ?? JSON.stringify(row)"
-                  :class="classes.bodyRow"
-                >
-                  <td
-                    v-for="column in effectiveColumns"
-                    :key="column.key"
-                    :class="classes.td"
-                  >
-                    <slot
-                      name="cell"
-                      :row="row"
-                      :column="column"
-                      :value="
-                        column.format
-                          ? column.format(getDeep(row, column.key), row)
-                          : (getDeep(row, column.key) ?? 'Inconnu')
-                      "
-                    >
-                      {{
-                        column.format
-                          ? column.format(getDeep(row, column.key), row)
-                          : getDeep(row, column.key) ?? 'Inconnu'
-                      }}
-                    </slot>
-                  </td>
-
-                  <td :class="classes.actionsTd">
-                    <button
-                      type="button"
-                      @click="handleDelete(row)"
-                      :class="classes.deleteButton"
-                    >
-                      <Icon
-                        name="mdi:trash"
-                        class="w-4 h-4 text-red-500"
-                      />
-                    </button>
-                  </td>
-                </tr>
-              </slot>
-            </template>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- FOOTER / PAGINATION -->
-      <div :class="classes.footer">
-        <slot
-          name="footer"
-          :rows="rows"
-          :columns="effectiveColumns"
-          :model="props.model"
-          :current-page="currentPage"
-          :can-go-prev="canGoPrev"
-          :can-go-next="canGoNext"
-          :go-to-page="goToPage"
-          :prev-page="handlePrevPage"
-          :next-page="handleNextPage"
-        >
-          <div class="text-sm opacity-70">
-            Page {{ currentPage }}
-            <span v-if="pageSize"> — {{ rows.length }} éléments sur cette page</span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="px-3 py-1 rounded border text-sm disabled:opacity-40"
-              :disabled="!canGoPrev || loading"
-              @click="handlePrevPage"
-            >
-              Précédent
-            </button>
-
-            <button
-              type="button"
-              class="px-3 py-1 rounded border text-sm disabled:opacity-40"
-              :disabled="!canGoNext || loading"
-              @click="handleNextPage"
-            >
-              Suivant
-            </button>
-          </div>
-        </slot>
+    <div class="flex items-center justify-between">
+      <h3 class="text-lg font-semibold capitalize">
+        {{ slotProps.model }}
+      </h3>
+      <div class="text-xs opacity-70">
+        Page {{ slotProps.currentPage }}
+        <span v-if="slotProps.pageSize">
+          — {{ slotProps.rows.length }} éléments
+        </span>
       </div>
     </div>
-  </slot>
+
+    <div
+      v-if="slotProps.error"
+      class="text-sm text-red-600"
+    >
+      {{ slotProps.error }}
+    </div>
+
+    <div
+      v-else-if="slotProps.loading"
+      class="text-sm opacity-70"
+    >
+      Chargement…
+    </div>
+
+    <div
+      v-else-if="slotProps.rows.length === 0"
+      class="text-sm opacity-70"
+    >
+      Aucun résultat
+    </div>
+
+    <table
+      v-else
+      class="nsdb-table w-full text-sm border"
+    >
+      <thead class="bg-gray-50">
+        <tr>
+          <th
+            v-for="column in slotProps.columns"
+            :key="column.key"
+            class="text-left px-4 py-2 font-bold cursor-pointer text-black hover:text-purple-500"
+            @click="slotProps.toggleSort(column)"
+          >
+            {{ column.label }}
+            <span v-if="slotProps.sortState.key === column.key">
+              <span v-if="slotProps.sortState.direction === 'asc'">▲</span>
+              <span v-else-if="slotProps.sortState.direction === 'desc'">▼</span>
+            </span>
+          </th>
+          <th class="px-4 py-2">
+            Actions
+          </th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr
+          v-for="row in slotProps.rows"
+          :key="row.id ?? JSON.stringify(row)"
+          class="border-t hover:bg-gray-50"
+        >
+          <td
+            v-for="column in slotProps.columns"
+            :key="column.key"
+            class="px-4 py-2"
+          >
+            {{
+              column.format
+                ? column.format(slotProps.getDeep(row, column.key), row)
+                : slotProps.getDeep(row, column.key) ?? 'Inconnu'
+            }}
+          </td>
+          <td class="px-4 py-2">
+            <button
+              type="button"
+              class="text-xs text-red-500 underline"
+              @click="slotProps.deleteRow(row)"
+            >
+              Supprimer
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="w-full flex justify-between items-center mt-2 text-sm">
+      <div class="opacity-70">
+        Page {{ slotProps.currentPage }}
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="px-3 py-1 rounded border text-sm disabled:opacity-40"
+          :disabled="!slotProps.canGoPrev || slotProps.loading"
+          @click="slotProps.prevPage()"
+        >
+          Précédent
+        </button>
+        <button
+          type="button"
+          class="px-3 py-1 rounded border text-sm disabled:opacity-40"
+          :disabled="!slotProps.canGoNext || slotProps.loading"
+          @click="slotProps.nextPage()"
+        >
+          Suivant
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Built-in LIST variant -->
+  <div
+    v-else-if="variantName === 'list'"
+    class="w-full space-y-3 text-black"
+  >
+    <div class="flex items-center justify-between">
+      <h3 class="text-lg font-semibold capitalize">
+        {{ slotProps.model }}
+      </h3>
+      <div class="text-xs opacity-70">
+        Page {{ slotProps.currentPage }}
+      </div>
+    </div>
+
+    <div
+      v-if="slotProps.error"
+      class="text-sm text-red-600"
+    >
+      {{ slotProps.error }}
+    </div>
+
+    <div
+      v-else-if="slotProps.loading"
+      class="text-sm opacity-70"
+    >
+      Chargement…
+    </div>
+
+    <div
+      v-else-if="slotProps.rows.length === 0"
+      class="text-sm opacity-70"
+    >
+      Aucun résultat
+    </div>
+
+    <div
+      v-else
+      class="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 text-black"
+    >
+      <article
+        v-for="row in slotProps.rows"
+        :key="row.id ?? JSON.stringify(row)"
+        class="border rounded-lg p-4 shadow-sm bg-white"
+      >
+        <div
+          v-for="column in slotProps.columns"
+          :key="column.key"
+          class="text-sm mb-1"
+        >
+          <span class="font-semibold mr-1">
+            {{ column.label }}:
+          </span>
+          <span>
+            {{
+              column.format
+                ? column.format(slotProps.getDeep(row, column.key), row)
+                : slotProps.getDeep(row, column.key) ?? 'Inconnu'
+            }}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          class="mt-2 text-xs text-red-500 underline"
+          @click="slotProps.deleteRow(row)"
+        >
+          Supprimer
+        </button>
+      </article>
+    </div>
+
+    <div class="w-full flex justify-between items-center mt-2 text-sm">
+      <div class="opacity-70">
+        Page {{ slotProps.currentPage }}
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="px-3 py-1 rounded border text-sm disabled:opacity-40"
+          :disabled="!slotProps.canGoPrev || slotProps.loading"
+          @click="slotProps.prevPage()"
+        >
+          Précédent
+        </button>
+        <button
+          type="button"
+          class="px-3 py-1 rounded border text-sm disabled:opacity-40"
+          :disabled="!slotProps.canGoNext || slotProps.loading"
+          @click="slotProps.nextPage()"
+        >
+          Suivant
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Fallback pour un variant inconnu sans slot custom -->
+  <pre v-else class="text-xs whitespace-pre-wrap bg-gray-100 p-2 rounded text-black">
+Variant "{{ variantName }}" inconnu et aucun slot correspondant.
+Données :
+{{ JSON.stringify(slotProps.rows, null, 2) }}
+  </pre>
 </template>
 
 <style scoped>
 @reference "tailwindcss";
 
 .nsdb-table {
-  width: 100% !important;
+  width: 100%;
   max-width: 100%;
   table-layout: auto;
-  width: -webkit-fill-available;
-  width: -moz-available;
-  width: stretch;
-  max-width: 100%;
 }
 </style>

@@ -12,6 +12,13 @@ export interface ListOptions {
 	select?: string
 	orderBy?: string
 	orderDirection?: OrderDirection
+	/**
+	 * ✅ NEW: permet un tri sur table jointe (Supabase: order(..., { foreignTable }))
+	 * Exemple:
+	 *   orderBy: 'title'
+	 *   orderForeignTable: 'book'
+	 */
+	orderForeignTable?: string
 	limit?: number
 	offset?: number
 }
@@ -51,12 +58,19 @@ function applyListOptions(
 	const {
 		orderBy = 'id',
 		orderDirection = 'asc',
+		orderForeignTable,
 		limit = 100,
 		offset = 0,
 	} = options
 
-	let finalQuery = query
-	finalQuery = finalQuery.order(orderBy, { ascending: orderDirection === 'asc' })
+	let finalQuery: any = query
+
+	// ✅ Support order sur table jointe via foreignTable (si fourni)
+	finalQuery = finalQuery.order(orderBy, {
+		ascending: orderDirection === 'asc',
+		...(orderForeignTable ? { foreignTable: orderForeignTable } : {}),
+	})
+
 	finalQuery = finalQuery.range(offset, offset + limit - 1)
 
 	return finalQuery
@@ -172,6 +186,9 @@ export const useSupabaseApi = () => {
 	 *
 	 *   all('playlists', '*', 'created_at', 'desc', 20, 0)
 	 *   all('playlists', { select: '*', orderBy: 'created_at', orderDirection: 'desc', limit: 20 })
+	 *
+	 * ✅ Support relation order:
+	 *   all('userBooks', { select: '*, book:books(*)', orderBy: 'title', orderForeignTable: 'book' })
 	 */
 	async function all<T = any>(
 		resource: string,
@@ -192,6 +209,7 @@ export const useSupabaseApi = () => {
 			options = {
 				orderBy: selectOrOptions.orderBy ?? orderBy,
 				orderDirection: selectOrOptions.orderDirection ?? orderDirection,
+				orderForeignTable: selectOrOptions.orderForeignTable,
 				limit: selectOrOptions.limit ?? limit,
 				offset: selectOrOptions.offset ?? offset,
 			}
@@ -320,6 +338,7 @@ export const useSupabaseApi = () => {
 			options = {
 				orderBy: selectOrOptions.orderBy ?? orderBy,
 				orderDirection: selectOrOptions.orderDirection ?? orderDirection,
+				orderForeignTable: selectOrOptions.orderForeignTable,
 				limit: selectOrOptions.limit ?? limit,
 				offset: selectOrOptions.offset ?? offset,
 			}
@@ -414,21 +433,6 @@ export const useSupabaseApi = () => {
 
 	/**
 	 * Recherche avancée avec where + tri + pagination.
-	 *
-	 * Exemple simple :
-	 *   find('songs', { where: { profile_id: myProfileId } })
-	 *
-	 * Exemple avec opérateurs :
-	 *   find('songs', {
-	 *     where: {
-	 *       profile_id: { op: 'eq', value: myProfileId },
-	 *       created_at: { op: 'gte', value: '2025-01-01' },
-	 *       title: { op: 'ilike', value: '%lofi%' },
-	 *     },
-	 *     orderBy: 'created_at',
-	 *     orderDirection: 'desc',
-	 *     limit: 50,
-	 *   })
 	 */
 	async function find<T = any>(
 		resource: string,
@@ -439,6 +443,7 @@ export const useSupabaseApi = () => {
 			where,
 			orderBy,
 			orderDirection,
+			orderForeignTable,
 			limit,
 			offset,
 		} = options
@@ -452,6 +457,7 @@ export const useSupabaseApi = () => {
 		const queryWithOptions = applyListOptions(queryWithWhere, {
 			orderBy,
 			orderDirection,
+			orderForeignTable,
 			limit,
 			offset,
 		})
