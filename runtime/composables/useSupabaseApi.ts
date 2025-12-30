@@ -13,10 +13,17 @@ export interface ListOptions {
 	orderBy?: string
 	orderDirection?: OrderDirection
 	/**
-	 * ✅ NEW: permet un tri sur table jointe (Supabase: order(..., { foreignTable }))
-	 * Exemple:
+	 * ✅ NEW: permet un tri sur table jointe.
+	 *
+	 * IMPORTANT:
+	 * - Dans ton cas PostgREST n’applique pas `book.order=title.asc`
+	 * - Mais applique bien `order=book(title).asc`
+	 *
+	 * Donc on transforme:
 	 *   orderBy: 'title'
 	 *   orderForeignTable: 'book'
+	 * en:
+	 *   .order('book(title)')
 	 */
 	orderForeignTable?: string
 	limit?: number
@@ -65,11 +72,19 @@ function applyListOptions(
 
 	let finalQuery: any = query
 
-	// ✅ Support order sur table jointe via foreignTable (si fourni)
-	finalQuery = finalQuery.order(orderBy, {
-		ascending: orderDirection === 'asc',
-		...(orderForeignTable ? { foreignTable: orderForeignTable } : {}),
-	})
+	// ✅ Fix: embedded ordering when ordering on a joined/embedded relation.
+	// PostgREST (dans ton cas) ignore `book.order=title.asc` mais respecte `order=book(title).asc`.
+	// Supabase-js traduit `.order('book(title)')` en `order=book(title).asc`.
+	if (orderForeignTable) {
+		const embeddedOrderKey = `${orderForeignTable}(${orderBy})`
+		finalQuery = finalQuery.order(embeddedOrderKey, {
+			ascending: orderDirection === 'asc',
+		})
+	} else {
+		finalQuery = finalQuery.order(orderBy, {
+			ascending: orderDirection === 'asc',
+		})
+	}
 
 	finalQuery = finalQuery.range(offset, offset + limit - 1)
 
