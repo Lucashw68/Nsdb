@@ -27,7 +27,8 @@ export interface ModelQuery {
 	 * Ex:
 	 * - "created_at"
 	 * - { created_at: "desc" }
-	 * - { "book.title": "asc" }  // relation order (requires useSupabaseApi support)
+	 * - "book.title"
+	 * - { "book.title": "asc" }
 	 */
 	orderBy?: string | Record<string, OrderDirection>
 	limit?: number
@@ -36,9 +37,6 @@ export interface ModelQuery {
 
 /**
  * Résultat normalisé pour l'order.
- * - orderBy          : colonne (sans table) OU brut si pas de relation
- * - orderDirection   : 'asc' | 'desc'
- * - orderForeignTable: si order relationnel (ex: 'book' pour 'book.title')
  */
 type NormalizedOrder = {
 	orderBy: string
@@ -46,23 +44,24 @@ type NormalizedOrder = {
 	orderForeignTable?: string
 }
 
-/**
- * Normalise un orderBy pour en extraire : colonne + direction (+ foreignTable optionnel).
- *
- * Supporte :
- * - "created_at"
- * - { created_at: "desc" }
- * - "book.title"
- * - { "book.title": "asc" }
- *
- * NOTE: le support réel de foreignTable nécessite `useSupabaseApi` (order(..., { foreignTable })).
- */
+function parseOrderPath(path: string): { foreignTable?: string; column: string } {
+	if (!path.includes('.')) return { column: path }
+
+	const parts = path.split('.').filter(Boolean)
+	if (parts.length === 2) {
+		const [foreignTable, column] = parts
+		return { foreignTable, column }
+	}
+
+	// cas non supporté proprement (ex: a.b.c)
+	return { column: path }
+}
+
 function normalizeOrder(rawOrderBy: ModelQuery['orderBy']): NormalizedOrder {
 	let orderBy = 'id'
 	let orderDirection: OrderDirection = 'asc'
-	let orderForeignTable: string | undefined = undefined
+	let orderForeignTable: string | undefined
 
-	// 1) string form
 	if (typeof rawOrderBy === 'string') {
 		const parsed = parseOrderPath(rawOrderBy)
 		orderBy = parsed.column
@@ -70,7 +69,6 @@ function normalizeOrder(rawOrderBy: ModelQuery['orderBy']): NormalizedOrder {
 		return { orderBy, orderDirection, orderForeignTable }
 	}
 
-	// 2) object form
 	if (rawOrderBy && typeof rawOrderBy === 'object') {
 		const [rawColumn, direction] = Object.entries(rawOrderBy)[0] as [
 			string,
@@ -89,34 +87,7 @@ function normalizeOrder(rawOrderBy: ModelQuery['orderBy']): NormalizedOrder {
 }
 
 /**
- * Parse une clé d'orderBy potentiellement relationnelle.
- * - "created_at"  => { column: "created_at" }
- * - "book.title"  => { foreignTable: "book", column: "title" }
- *
- * Heuristique volontairement simple:
- * - 0 ou 1 "." : supporté
- * - >1 "." : on garde brut dans column (et foreignTable undefined), à améliorer plus tard si besoin.
- */
-function parseOrderPath(path: string): { foreignTable?: string; column: string } {
-	if (!path.includes('.')) {
-		return { column: path }
-	}
-
-	const parts = path.split('.').filter(Boolean)
-	if (parts.length === 2) {
-		const [foreignTable, column] = parts
-		return { foreignTable, column }
-	}
-
-	// cas complexe non supporté proprement pour l'instant
-	return { column: path }
-}
-
-/**
  * Unified CRUD abstraction over a Supabase table.
- *
- * - Store mode (Pinia/offline)    : useSupabaseModel('table', { store: true, storeCreator })
- * - API mode (stateless, default) : useSupabaseModel('table')
  */
 export function useSupabaseModel<TRow>(
 	modelName: string,
@@ -180,8 +151,9 @@ export function useSupabaseModel<TRow>(
 			return (response.data ?? null) as TRow | null
 		},
 
+		// ✅ FIX: pass (id, payload)
 		update: async (id: string | number, payload: Partial<TRow>) => {
-			const response = await api.update<TRow>(modelName, payload)
+			const response = await api.update<TRow>(modelName, id, payload)
 			return (response.data ?? null) as TRow | null
 		},
 
@@ -190,13 +162,7 @@ export function useSupabaseModel<TRow>(
 		},
 
 		fetch: async (query: ModelQuery = {}) => {
-			const {
-				select = '*',
-				where,
-				limit = 100,
-				offset = 0,
-			} = query
-
+			const { select = '*', where, limit = 100, offset = 0 } = query
 			const { orderBy, orderDirection, orderForeignTable } = normalizeOrder(query.orderBy)
 
 			let data: TRow[] = []
@@ -207,22 +173,20 @@ export function useSupabaseModel<TRow>(
 					where,
 					orderBy,
 					orderDirection,
-					orderForeignTable, // NEW
+					orderForeignTable,
 					limit,
 					offset,
-				} as any)
-
+				})
 				data = (response.data ?? []) as TRow[]
 			} else {
 				const response = await api.all<TRow>(modelName, {
 					select,
 					orderBy,
 					orderDirection,
-					orderForeignTable, // NEW
+					orderForeignTable,
 					limit,
 					offset,
-				} as any)
-
+				})
 				data = (response.data ?? []) as TRow[]
 			}
 
