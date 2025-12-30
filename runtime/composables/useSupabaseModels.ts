@@ -1,4 +1,3 @@
-// @lucashw68/nsdb/runtime/composables/useSupabaseModel.ts
 import { useSupabaseApi, type OrderDirection, type WhereClause } from './useSupabaseApi'
 import type { Ref } from 'vue'
 import { ref } from 'vue'
@@ -23,6 +22,7 @@ type Options<T> =
 export interface ModelQuery {
 	select?: string
 	where?: WhereClause
+
 	/**
 	 * Ex:
 	 * - "created_at"
@@ -31,8 +31,15 @@ export interface ModelQuery {
 	 * - { "book.title": "asc" }
 	 */
 	orderBy?: string | Record<string, OrderDirection>
+
 	limit?: number
 	offset?: number
+
+	/**
+	 * Recherche texte (implémentée par useSupabaseApi via `.or(... ilike ...)`)
+	 */
+	search?: string
+	searchColumns?: string[]
 }
 
 /**
@@ -110,8 +117,12 @@ export function useSupabaseModel<TRow>(
 		const store = storeCreator()
 		const noOp = () => {}
 
+		// ⚠️ En mode store, on ne peut pas garantir le count (sauf si ton store le gère)
+		const totalCount = ref<number | null>(null)
+
 		return {
 			items: store.items as Ref<TRow[]>,
+			totalCount,
 
 			getById: async (id: string | number) =>
 				(store.getById(id) as TRow | null) ?? null,
@@ -137,9 +148,11 @@ export function useSupabaseModel<TRow>(
 	// ############################################################
 	const api = useSupabaseApi()
 	const items = ref<TRow[]>([])
+	const totalCount = ref<number | null>(null)
 
 	return {
 		items,
+		totalCount,
 
 		getById: async (id: string | number, select: string = '*') => {
 			const response = await api.show<TRow>(modelName, id, select)
@@ -151,21 +164,36 @@ export function useSupabaseModel<TRow>(
 			return (response.data ?? null) as TRow | null
 		},
 
-		// ✅ FIX: pass (id, payload)
+		// ✅ Important: api.update(resource, id, payload)
 		update: async (id: string | number, payload: Partial<TRow>) => {
 			const response = await api.update<TRow>(modelName, id, payload)
-			return (response.data ?? null) as TRow | null
+			// selon ton api.update, ça peut renvoyer T[] : on ne force pas ici
+			return (response.data ?? null) as any
 		},
 
 		remove: async (id: string | number) => {
 			await api.destroy(modelName, id)
 		},
 
+		/**
+		 * fetch() met à jour:
+		 * - items.value
+		 * - totalCount.value (si useSupabaseApi renvoie count)
+		 */
 		fetch: async (query: ModelQuery = {}) => {
-			const { select = '*', where, limit = 100, offset = 0 } = query
+			const {
+				select = '*',
+				where,
+				limit = 100,
+				offset = 0,
+				search,
+				searchColumns,
+			} = query
+
 			const { orderBy, orderDirection, orderForeignTable } = normalizeOrder(query.orderBy)
 
 			let data: TRow[] = []
+			let count: number | null = null
 
 			if (where && Object.keys(where).length > 0) {
 				const response = await api.find<TRow>(modelName, {
@@ -176,8 +204,12 @@ export function useSupabaseModel<TRow>(
 					orderForeignTable,
 					limit,
 					offset,
+					search,
+					searchColumns,
 				})
+
 				data = (response.data ?? []) as TRow[]
+				count = response.count ?? null
 			} else {
 				const response = await api.all<TRow>(modelName, {
 					select,
@@ -186,11 +218,17 @@ export function useSupabaseModel<TRow>(
 					orderForeignTable,
 					limit,
 					offset,
+					search,
+					searchColumns,
 				})
+
 				data = (response.data ?? []) as TRow[]
+				count = response.count ?? null
 			}
 
 			items.value = Array.isArray(data) ? data : []
+			totalCount.value = typeof count === 'number' ? count : null
+
 			return items.value
 		},
 
