@@ -227,7 +227,7 @@ export function useSupabaseModel<TRow>(
 			}
 
 			items.value = Array.isArray(data) ? data : []
-			totalCount.value = typeof count === 'number' ? count : null
+			totalCount.value = count ?? null
 
 			return items.value
 		},

@@ -150,6 +150,31 @@ function handleResponse<T>(payload: { data: T | null; error: any; count?: number
 	}
 }
 
+function handleListResponse<T>(
+	data: T[] | null,
+	count: number | null,
+	error: any,
+	context: string
+	) {
+	if (error) {
+		console.error(`❌ [${context}]`, error)
+		return {
+		success: false as const,
+		error,
+		data: [] as T[],
+		count: null as number | null,
+		}
+	}
+
+	return {
+		success: true as const,
+		error: undefined,
+		data: (data ?? []) as T[],
+		count: typeof count === 'number' ? count : null,
+	}
+}
+
+
 export const useSupabaseApi = () => {
 	const supabaseClient = useSupabaseClient?.()
 	if (!supabaseClient) {
@@ -189,7 +214,7 @@ export const useSupabaseApi = () => {
 		q = applyListOptions(q, options)
 
 		const { data, error, count } = await q
-		return handleResponse<T[]>({ data, error, count }, `ALL ${resource}`)
+		return handleListResponse<T>(data, count ?? null, error, `ALL ${resource}`)
 	}
 
 	async function show<T = any>(resource: string, id: string | number, select: string = '*') {
@@ -319,7 +344,7 @@ export const useSupabaseApi = () => {
 		q = applyListOptions(q, { orderBy, orderDirection, orderForeignTable, limit, offset })
 
 		const { data, error, count } = await q
-		return handleResponse<T[]>({ data, error, count }, `FIND ${resource}`)
+		return handleListResponse<T>(data, count ?? null, error, `FIND ${resource}`)
 	}
 
 	async function findOne<T = any>(resource: string, options: FindOptions) {
