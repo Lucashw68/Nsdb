@@ -209,7 +209,7 @@ export const useSupabaseApi = () => {
 			}
 		}
 
-		let q: any = supabaseClient.from(resource).select(selectClause, { count: 'exact', head: true })
+		let q: any = supabaseClient.from(resource).select(selectClause, { count: 'exact' })
 		q = applySearch(q, options)
 		q = applyListOptions(q, options)
 
@@ -289,7 +289,7 @@ export const useSupabaseApi = () => {
 		q = applyListOptions(q, options)
 
 		const { data, error, count } = await q
-		return handleResponse<T[]>({ data, error, count }, `ALL ${resource} WHERE ${propertyName}=${propertyValue}`)
+		return handleListResponse<T>(data, count ?? null, error, `ALL ${resource} WHERE ${propertyName}=${propertyValue}`)
 	}
 
 	async function showByProperty<T = any>(
@@ -338,7 +338,7 @@ export const useSupabaseApi = () => {
 			searchColumns,
 		} = options
 
-		let q: any = supabaseClient.from(resource).select(select, { count: 'exact', head: true })
+		let q: any = supabaseClient.from(resource).select(select, { count: 'exact' })
 		q = applyWhereFilters(q, where)
 		q = applySearch(q, { search, searchColumns })
 		q = applyListOptions(q, { orderBy, orderDirection, orderForeignTable, limit, offset })
