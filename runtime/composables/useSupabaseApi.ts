@@ -209,7 +209,7 @@ export const useSupabaseApi = () => {
 			}
 		}
 
-		let q: any = supabaseClient.from(resource).select(selectClause, { count: 'exact' })
+		let q: any = supabaseClient.from(resource).select(selectClause, { count: 'exact', head: true })
 		q = applySearch(q, options)
 		q = applyListOptions(q, options)
 
@@ -338,7 +338,7 @@ export const useSupabaseApi = () => {
 			searchColumns,
 		} = options
 
-		let q: any = supabaseClient.from(resource).select(select, { count: 'exact' })
+		let q: any = supabaseClient.from(resource).select(select, { count: 'exact', head: true })
 		q = applyWhereFilters(q, where)
 		q = applySearch(q, { search, searchColumns })
 		q = applyListOptions(q, { orderBy, orderDirection, orderForeignTable, limit, offset })
