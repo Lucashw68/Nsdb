@@ -62,7 +62,8 @@ export function useNsdbSchema(schema: Schema | null | undefined) {
 	 *
 	 * - Si aucun schema n'est fourni, on utilise celui passé au hook.
 	 */
-function buildSelectFromSchema(
+
+	function buildSelectFromSchema(
 		schema: Schema | null | undefined = safeSchema,
 		baseSelect: string = '*'
 	): string {
@@ -79,13 +80,13 @@ function buildSelectFromSchema(
 
 			const rel = field.relation
 
-			// Pour l’instant on inclut au moins tous les belongsTo.
-			// Tu peux décider plus tard de filtrer certains hasOne.
+			// Pour l'instant, tous les belongsTo et hasOne sont inclus.
+			// Les hasMany sont exclus pour éviter les charges trop lourdes.
+			// À affiner, par exemple, filtrer certains hasOne.
 			if (rel.kind !== 'belongsTo' && rel.kind !== 'hasOne') continue
 
 			const alias = aliasFromColumn(column, rel)
 
-			// ⚠️ Ici on utilise le foreignKeyName pour lever l’ambiguïté côté PostgREST
 			const fkSuffix = rel.foreignKeyName ? `!${rel.foreignKeyName}` : ''
 
 			const part = `${alias}:${rel.referencedTable}${fkSuffix}(*)`
@@ -111,7 +112,7 @@ function buildSelectFromSchema(
 		 * - select auto (relations) basé sur le schema
 		 * - support de where, orderBy, limit, offset via model.fetch(query)
 		 */
-		const all = async (query: any = {}) => {
+		const fetch = async (query: any = {}) => {
 			const select = buildSelectFromSchema(safeSchema)
 			const finalQuery = { ...query, select }
 
@@ -134,7 +135,7 @@ function buildSelectFromSchema(
 			return Array.isArray(rows) ? (rows as TRow[]) : []
 		}
 
-		return { all, find }
+		return { fetch, find }
 	}
 
 	return {

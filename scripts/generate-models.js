@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from 'path'
 import { parseArgs } from '../helpers/args.js'
+import { getOption, loadNsdbConfig } from '../helpers/config.js'
 import { exists, readText, writeText, ensureDir } from '../helpers/io.js'
 import {
 	createTsProject,
@@ -24,21 +25,22 @@ function buildModelCode(tableName, templateContent, currentWorkingDirectory) {
 		.replace(/__PASCAL__/g, pascalName)
 		.replace(/__ROW__/g, rowTypeName)
 		.replace(/__HOOK__/g, hookName)
-		.replace(/__STORE_IMPORT__/g, storeExists ? `import { ${storeIdentifier} } from '~/stores/${storeIdentifier}'` : '')
-		.replace(/__STORE_CREATOR__/g, storeExists ? `(() => ${storeIdentifier}())` : 'undefined')
+		.replace(/__STORE_IMPORT__/g, storeExists ? `import { ${storeIdentifier} } from '~~/stores/${storeIdentifier}'` : '')
+		.replace(/__STORE_CREATOR__/g, storeExists ? `(() => ${storeIdentifier}() as any)` : 'undefined')
 
 	return { code, hookName }
 }
 
-function main() {
+async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
-	const typesFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('types', 'types/database.types.ts'))
-	const outputDirectory = path.resolve(currentWorkingDirectory, parsedArguments.get('outDir', 'nsdb/models'))
+	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
+	const typesFilePath = path.resolve(currentWorkingDirectory, getOption(parsedArguments, config, 'types', 'paths.types'))
+	const outputDirectory = path.resolve(currentWorkingDirectory, getOption(parsedArguments, config, 'outDir', 'paths.models'))
 	const barrelFilePath = path.join(outputDirectory, 'index.ts')
 	const templateFilePath = path.resolve(
 		currentWorkingDirectory,
-		parsedArguments.get('template', 'node_modules/@lucashw68/nsdb/templates/model.template.ts')
+		getOption(parsedArguments, config, 'template', 'templates.model')
 	)
 
 	if (!exists(typesFilePath)) {
@@ -80,4 +82,10 @@ function main() {
 	console.log('✅ models barrel:', path.relative(currentWorkingDirectory, barrelFilePath))
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+if (import.meta.url === `file://${process.argv[1]}`) {
+	main().catch((error) => {
+		console.error('❌ Unexpected error while generating models.')
+		console.error(error)
+		process.exit(1)
+	})
+}

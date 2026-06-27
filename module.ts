@@ -9,6 +9,8 @@ import {
 import { existsSync } from 'node:fs'
 
 export interface NsdbOptions {
+	withComponents?: boolean
+	componentsPrefix?: string
 	withStores?: boolean
 }
 
@@ -16,7 +18,7 @@ export default defineNuxtModule<NsdbOptions>({
 	meta: { name: '@lucashw68/nsdb', configKey: 'nsdb' },
 	defaults: { withComponents: true, componentsPrefix: 'Nsdb', withStores: true },
 
-	setup(options, nuxt) {
+	setup(options: NsdbOptions, nuxt: any) {
 		const { resolve } = createResolver(import.meta.url)
 		const rMod = createResolver(import.meta.url)
 		const rApp = createResolver(nuxt.options.srcDir)
@@ -65,7 +67,7 @@ export default defineNuxtModule<NsdbOptions>({
 		})
 
 		// Regénère les proxies si ~/nsdb/models.ts ou ~/nsdb/schemas.ts apparaissent en dev
-		nuxt.hook('builder:watch', (_event, relPath) => {
+		nuxt.hook('builder:watch', (_event: string, relPath: string) => {
 			if (!relPath) return
 			const normalized = relPath.replace(/^[./]+/, '')
 			if (normalized === 'nsdb/models.ts') {

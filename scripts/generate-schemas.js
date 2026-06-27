@@ -2,6 +2,7 @@
 import path from 'path'
 import { exists, readText, writeText, ensureDir } from '../helpers/io.js'
 import { parseArgs } from '../helpers/args.js'
+import { getOption, loadNsdbConfig } from '../helpers/config.js'
 import {
 	createTsProject,
 	addSourceFile,
@@ -273,28 +274,26 @@ function renderTemplate(templateContent, descriptor) {
 		.replace('// __FIELDS__', descriptor.fieldLines.join('\n'))
 }
 
-function main() {
+async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
+	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
 
 	const typesFilePath = path.resolve(
 		currentWorkingDirectory,
-		parsedArguments.get('types', 'types/database.types.ts')
+		getOption(parsedArguments, config, 'types', 'paths.types')
 	)
 
 	const outputDirectory = path.resolve(
 		currentWorkingDirectory,
-		parsedArguments.get('outDir', 'nsdb/schemas')
+		getOption(parsedArguments, config, 'outDir', 'paths.schemas')
 	)
 
 	const barrelFilePath = path.join(outputDirectory, 'index.ts')
 
 	const templateFilePath = path.resolve(
 		currentWorkingDirectory,
-		parsedArguments.get(
-			'template',
-			'node_modules/@lucashw68/nsdb/templates/schema.template.ts'
-		)
+		getOption(parsedArguments, config, 'template', 'templates.schema')
 	)
 
 	if (!exists(typesFilePath)) {
@@ -350,4 +349,10 @@ function main() {
 	console.log('✅ schemas barrel:', path.relative(currentWorkingDirectory, barrelFilePath))
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+if (import.meta.url === `file://${process.argv[1]}`) {
+	main().catch((error) => {
+		console.error('❌ Unexpected error while generating schemas.')
+		console.error(error)
+		process.exit(1)
+	})
+}

@@ -1,4 +1,4 @@
-import type { Tables } from '~/types/database.types'
+import type { Tables } from '~~/types/database.types'
 import type { EntityField } from '@lucashw68/nsdb/types/entities'
 import * as Enums from '~~/nsdb/enums'
 

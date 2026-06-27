@@ -1,10 +1,25 @@
 {
-  // https://nuxt.com/docs/guide/concepts/typescript
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "#nsdb/*": ["./*"]
-    }
-  },
-  "include": ["stores/**/*.ts", "types/**/*.ts", "scripts/**/*.ts"]
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"strict": true,
+		"skipLibCheck": true,
+		"baseUrl": ".",
+		"paths": {
+			"#nsdb/*": ["runtime/*"],
+			"@lucashw68/nsdb/*": ["./*"]
+		},
+		"types": ["node"]
+	},
+	"include": [
+		"nuxt-imports.d.ts",
+		"module.ts",
+		"runtime/**/*.ts",
+		"runtime/**/*.vue",
+		"types/**/*.ts",
+		"scripts/**/*.js",
+		"helpers/**/*.js",
+		"cli/**/*.js"
+	]
 }

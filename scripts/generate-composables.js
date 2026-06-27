@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from 'path'
 import { parseArgs } from '../helpers/args.js'
+import { getOption, loadNsdbConfig } from '../helpers/config.js'
 import { exists, readText, writeText, ensureDir } from '../helpers/io.js'
 import {
 	createTsProject,
@@ -10,28 +11,26 @@ import {
 } from '../helpers/ts.js'
 import { modelHookName } from '../helpers/names.js'
 
-function main() {
+async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
+	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
 
 	const typesFilePath = path.resolve(
 		currentWorkingDirectory,
-		parsedArguments.get('types', 'types/database.types.ts')
+		getOption(parsedArguments, config, 'types', 'paths.types')
 	)
 
 	const outputDirectory = path.resolve(
 		currentWorkingDirectory,
-		parsedArguments.get('outDir', 'nsdb/composables')
+		getOption(parsedArguments, config, 'outDir', 'paths.composables')
 	)
 
-	const outputFilePath = path.join(outputDirectory, 'useNsdbModel.ts')
+	const outputFilePath = path.join(outputDirectory, 'useNsdbModels.ts')
 
 	const templateFilePath = path.resolve(
 		currentWorkingDirectory,
-		parsedArguments.get(
-			'template',
-			'node_modules/@lucashw68/nsdb/templates/useNsdbModel.template.ts'
-		)
+		getOption(parsedArguments, config, 'template', 'templates.useNsdbModel')
 	)
 
 	if (!exists(typesFilePath)) {
@@ -85,7 +84,13 @@ function main() {
 			.replace('// __CASES__', caseLines.join('\n')) + '\n'
 
 	writeText(outputFilePath, finalContent)
-	console.log('✅ useNsdbModel:', path.relative(currentWorkingDirectory, outputFilePath))
+	console.log('✅ useNsdbModels:', path.relative(currentWorkingDirectory, outputFilePath))
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+if (import.meta.url === `file://${process.argv[1]}`) {
+	main().catch((error) => {
+		console.error('❌ Unexpected error while generating composables.')
+		console.error(error)
+		process.exit(1)
+	})
+}

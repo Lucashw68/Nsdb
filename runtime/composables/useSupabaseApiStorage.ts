@@ -1,316 +1,355 @@
 import { useSupabaseClient } from '#imports'
+import type { OrderDirection } from '@lucashw68/nsdb/types/list'
 
-// Tu peux réutiliser ton type global si tu veux
-export type OrderDirection = 'asc' | 'desc'
+export type StorageFileBody = File | Blob | ArrayBuffer | ArrayBufferView | FormData | string
 
 export type StorageOrderBy =
-    | 'name'
-    | 'created_at'
-    | 'updated_at'
-    | 'last_accessed_at'
-    | 'size'
+	| 'name'
+	| 'created_at'
+	| 'updated_at'
+	| 'last_accessed_at'
 
-export interface StorageListOptions {
-    path?: string
-    limit?: number
-    offset?: number
-    orderBy?: StorageOrderBy
-    orderDirection?: OrderDirection
+export type StorageImageResizeMode = 'cover' | 'contain' | 'fill'
+export type StorageImageFormat = 'origin' | 'webp' | 'png' | 'jpeg'
+
+export interface StorageImageTransformOptions {
+	width?: number
+	height?: number
+	resize?: StorageImageResizeMode
+	quality?: number
+	format?: StorageImageFormat
 }
 
-/**
- * Unifie la gestion des réponses de Supabase Storage.
- * Même shape que useSupabaseApi : { success, data, error }
- */
-function handleStorageResponse<T>(
-    data: T | null,
-    error: any,
-    context: string
-) {
-    if (error) {
-        console.error(`❌ [storage:${context}]`, error)
-        return {
-            success: false as const,
-            error,
-            data: undefined as unknown as T,
-        }
-    }
+export interface StorageListOptions {
+	path?: string
+	limit?: number
+	offset?: number
+	orderBy?: StorageOrderBy
+	orderDirection?: OrderDirection
+	search?: string
+}
 
-    return {
-        success: true as const,
-        error: undefined,
-        data: data as T,
-    }
+export interface StorageWriteOptions {
+	cacheControl?: string
+	contentType?: string
+	metadata?: Record<string, unknown>
+	upsert?: boolean
+}
+
+export interface StorageDownloadOptions {
+	transform?: StorageImageTransformOptions
+}
+
+export interface StoragePublicUrlOptions {
+	download?: boolean | string
+	transform?: StorageImageTransformOptions
+}
+
+export interface StorageSignedUrlOptions {
+	download?: boolean | string
+	transform?: StorageImageTransformOptions
+}
+
+export interface StorageCreateBucketOptions {
+	public?: boolean
+	allowedMimeTypes?: string[]
+	fileSizeLimit?: number | string
+}
+
+export interface StorageApiSuccess<T> {
+	success: true
+	data: T
+	error: undefined
+}
+
+export interface StorageApiFailure<T> {
+	success: false
+	data: T
+	error: unknown
+}
+
+export type StorageApiResponse<T> = StorageApiSuccess<T> | StorageApiFailure<T>
+
+const DEFAULT_LIST_OPTIONS: Required<Pick<StorageListOptions, 'path' | 'limit' | 'offset' | 'orderBy' | 'orderDirection'>> = {
+	path: '',
+	limit: 100,
+	offset: 0,
+	orderBy: 'name',
+	orderDirection: 'asc',
+}
+
+function normalizePath(path = '') {
+	return path
+		.split('/')
+		.map(part => part.trim())
+		.filter(Boolean)
+		.join('/')
+}
+
+function normalizeDirectoryPath(path = '') {
+	return normalizePath(path)
+}
+
+function normalizeFilePath(path: string) {
+	const normalizedPath = normalizePath(path)
+
+	if (!normalizedPath) {
+		throw new Error('[nsdb:storage] A file path is required.')
+	}
+
+	return normalizedPath
+}
+
+function joinPath(...parts: Array<string | number | null | undefined>) {
+	return parts
+		.map(part => normalizePath(String(part ?? '')))
+		.filter(Boolean)
+		.join('/')
+}
+
+function applySearchFilter<T extends { name?: string }>(items: T[], search?: string) {
+	const normalizedSearch = search?.trim().toLowerCase()
+	if (!normalizedSearch) return items
+
+	return items.filter(item => item.name?.toLowerCase().includes(normalizedSearch))
+}
+
+function handleStorageResponse<T>(
+	payload: { data: T | null; error: unknown },
+	context: string,
+	fallbackData: T
+): StorageApiResponse<T> {
+	const { data, error } = payload
+
+	if (error) {
+		console.error(`❌ [storage:${context}]`, error)
+		return {
+			success: false,
+			error,
+			data: fallbackData,
+		}
+	}
+
+	return {
+		success: true,
+		error: undefined,
+		data: (data ?? fallbackData) as T,
+	}
+}
+
+function normalizeBucketOptions(options: StorageCreateBucketOptions = {}) {
+	return {
+		public: options.public ?? false,
+		allowedMimeTypes: options.allowedMimeTypes,
+		fileSizeLimit: options.fileSizeLimit,
+	}
 }
 
 export const useSupabaseApiStorage = () => {
-    const supabase = useSupabaseClient?.()
+	const supabaseClient = useSupabaseClient?.()
 
-    if (!supabase) {
-        throw new Error('[nsdb] Supabase client not found. Install @nuxtjs/supabase.')
-    }
+	if (!supabaseClient) {
+		throw new Error('[nsdb] Supabase client not found. Install @nuxtjs/supabase.')
+	}
 
-    // ############################################################
-    // # LIST (all)
-    // ############################################################
+	function bucket(bucketName: string) {
+		if (!bucketName.trim()) {
+			throw new Error('[nsdb:storage] A bucket name is required.')
+		}
 
-    /**
-     * Liste le contenu d’un bucket (équivalent amélioré de ton "all").
-     *
-     * Exemple :
-     *   list('songs', { path: 'covers', orderBy: 'name', orderDirection: 'asc' })
-     */
-    async function list(
-        bucket: string,
-        options: StorageListOptions = {}
-    ) {
-        const {
-            path = '',
-            limit = 100,
-            offset = 0,
-            orderBy = 'name',
-            orderDirection = 'asc',
-        } = options
+		return supabaseClient.storage.from(bucketName)
+	}
 
-        const { data, error } = await supabase
-            .storage
-            .from(bucket)
-            .list(path, {
-                limit,
-                offset,
-                sortBy: { column: orderBy, order: orderDirection },
-            })
+	/**
+	 * Liste les fichiers et dossiers d'un bucket.
+	 * La recherche est locale car Supabase Storage ne fournit pas de recherche texte native.
+	 */
+	async function list<T extends { name?: string } = any>(bucketName: string, options: StorageListOptions = {}) {
+		const listOptions = { ...DEFAULT_LIST_OPTIONS, ...options }
+		const directoryPath = normalizeDirectoryPath(listOptions.path)
 
-        return handleStorageResponse<any[]>(data, error, `LIST ${bucket}/${path}`)
-    }
+		const { data, error } = await bucket(bucketName).list(directoryPath, {
+			limit: listOptions.limit,
+			offset: listOptions.offset,
+			sortBy: {
+				column: listOptions.orderBy,
+				order: listOptions.orderDirection,
+			},
+		})
 
-    /**
-     * Alias pour compatibilité avec ton ancienne API.
-     */
-    async function all(
-        bucket: string,
-        path: string = '',
-        limit: number = 100,
-        orderBy: StorageOrderBy = 'name',
-        orderDirection: OrderDirection = 'asc'
-    ) {
-        return list(bucket, { path, limit, orderBy, orderDirection })
-    }
+		const filteredData = applySearchFilter((data ?? []) as unknown as T[], listOptions.search)
+		return handleStorageResponse<T[]>({ data: filteredData, error }, `LIST ${bucketName}/${directoryPath}`, [])
+	}
 
-    // ############################################################
-    // # UPLOAD
-    // ############################################################
+	/**
+	 * Upload un nouveau fichier. Utiliser update() pour remplacer explicitement un fichier existant.
+	 */
+	async function upload<T = any>(
+		bucketName: string,
+		path: string,
+		fileBody: StorageFileBody,
+		options: StorageWriteOptions = {}
+	) {
+		const filePath = normalizeFilePath(path)
+		const { data, error } = await bucket(bucketName).upload(filePath, fileBody, options as any)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `UPLOAD ${bucketName}/${filePath}`, null as T)
+	}
 
-    /**
-     * Upload d’un fichier dans un bucket.
-     *
-     * Exemple :
-     *   upload('songs', `covers/${id}.png`, file, { upsert: true })
-     */
-    async function upload(
-        bucket: string,
-        path: string,
-        file: File | Blob,
-        options: { upsert?: boolean } = {}
-    ) {
-        const { upsert = false } = options
+	/**
+	 * Remplace le contenu d'un fichier existant sans changer son chemin.
+	 */
+	async function update<T = any>(
+		bucketName: string,
+		path: string,
+		fileBody: StorageFileBody,
+		options: Omit<StorageWriteOptions, 'upsert'> = {}
+	) {
+		const filePath = normalizeFilePath(path)
+		const { data, error } = await bucket(bucketName).update(filePath, fileBody, options as any)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `UPDATE ${bucketName}/${filePath}`, null as T)
+	}
 
-        const { data, error } = await supabase
-            .storage
-            .from(bucket)
-            .upload(path, file, { upsert })
+	async function download(bucketName: string, path: string, options: StorageDownloadOptions = {}) {
+		const filePath = normalizeFilePath(path)
+		const { data, error } = await bucket(bucketName).download(filePath, options as any)
+		return handleStorageResponse<Blob>({ data, error }, `DOWNLOAD ${bucketName}/${filePath}`, null as unknown as Blob)
+	}
 
-        return handleStorageResponse<any>(data, error, `UPLOAD ${bucket}/${path}`)
-    }
+	async function remove<T = any>(bucketName: string, paths: string | string[]) {
+		const filePaths = (Array.isArray(paths) ? paths : [paths]).map(normalizeFilePath)
+		const { data, error } = await bucket(bucketName).remove(filePaths)
+		return handleStorageResponse<T[]>({ data: data as T[] | null, error }, `REMOVE ${bucketName}`, [])
+	}
 
-    // ############################################################
-    // # GET / DOWNLOAD
-    // ############################################################
+	function getPublicUrl(bucketName: string, path: string, options: StoragePublicUrlOptions = {}) {
+		const filePath = normalizeFilePath(path)
+		const { data } = bucket(bucketName).getPublicUrl(filePath, options as any)
+		return data.publicUrl
+	}
 
-    /**
-     * Récupère le fichier (Blob) depuis le storage.
-     *
-     * Exemple :
-     *   const { success, data } = await get('songs', 'covers/123.png')
-     *   if (success && data) { const url = URL.createObjectURL(data) }
-     */
-    async function download(
-        bucket: string,
-        path: string
-    ) {
-        const { data, error } = await supabase
-            .storage
-            .from(bucket)
-            .download(path)
+	async function createSignedUrl(
+		bucketName: string,
+		path: string,
+		expiresIn = 60,
+		options: StorageSignedUrlOptions = {}
+	) {
+		const filePath = normalizeFilePath(path)
+		const { data, error } = await bucket(bucketName).createSignedUrl(filePath, expiresIn, options as any)
+		return handleStorageResponse<{ signedUrl: string }>(
+			{ data, error },
+			`SIGNED_URL ${bucketName}/${filePath}`,
+			null as unknown as { signedUrl: string },
+		)
+	}
 
-        // data est un Blob
-        return handleStorageResponse<Blob | null>(data, error, `DOWNLOAD ${bucket}/${path}`)
-    }
+	async function createSignedUrls(
+		bucketName: string,
+		paths: string[],
+		expiresIn = 60,
+		options: StorageSignedUrlOptions = {}
+	) {
+		const filePaths = paths.map(normalizeFilePath)
+		const { data, error } = await bucket(bucketName).createSignedUrls(filePaths, expiresIn, options as any)
+		return handleStorageResponse<Array<{ path: string; signedUrl: string }>>(
+			{ data: data as Array<{ path: string; signedUrl: string }> | null, error },
+			`SIGNED_URLS ${bucketName}`,
+			[],
+		)
+	}
 
-    /**
-     * Alias plus court, style "GET".
-     * get() == download()
-     */
-    async function get(
-        bucket: string,
-        path: string
-    ) {
-        return download(bucket, path)
-    }
+	async function createSignedUploadUrl(bucketName: string, path: string) {
+		const filePath = normalizeFilePath(path)
+		const { data, error } = await bucket(bucketName).createSignedUploadUrl(filePath)
+		return handleStorageResponse<{ signedUrl: string; path: string; token: string }>(
+			{ data, error },
+			`SIGNED_UPLOAD_URL ${bucketName}/${filePath}`,
+			null as unknown as { signedUrl: string; path: string; token: string },
+		)
+	}
 
-    // ############################################################
-    // # DELETE
-    // ############################################################
+	async function uploadToSignedUrl<T = any>(
+		bucketName: string,
+		path: string,
+		token: string,
+		fileBody: StorageFileBody
+	) {
+		const filePath = normalizeFilePath(path)
+		const { data, error } = await bucket(bucketName).uploadToSignedUrl(filePath, token, fileBody as any)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `UPLOAD_SIGNED_URL ${bucketName}/${filePath}`, null as T)
+	}
 
-    /**
-     * Supprime un ou plusieurs fichiers.
-     *
-     * Exemple :
-     *   remove('songs', 'covers/123.png')
-     *   remove('songs', ['covers/1.png', 'covers/2.png'])
-     */
-    async function remove(
-        bucket: string,
-        paths: string | string[]
-    ) {
-        const pathArray = Array.isArray(paths) ? paths : [paths]
+	async function move<T = any>(bucketName: string, fromPath: string, toPath: string) {
+		const normalizedFromPath = normalizeFilePath(fromPath)
+		const normalizedToPath = normalizeFilePath(toPath)
+		const { data, error } = await bucket(bucketName).move(normalizedFromPath, normalizedToPath)
+		return handleStorageResponse<T>(
+			{ data: data as T | null, error },
+			`MOVE ${bucketName} ${normalizedFromPath} -> ${normalizedToPath}`,
+			null as T,
+		)
+	}
 
-        const { data, error } = await supabase
-            .storage
-            .from(bucket)
-            .remove(pathArray)
+	async function copy<T = any>(bucketName: string, fromPath: string, toPath: string) {
+		const normalizedFromPath = normalizeFilePath(fromPath)
+		const normalizedToPath = normalizeFilePath(toPath)
+		const { data, error } = await bucket(bucketName).copy(normalizedFromPath, normalizedToPath)
+		return handleStorageResponse<T>(
+			{ data: data as T | null, error },
+			`COPY ${bucketName} ${normalizedFromPath} -> ${normalizedToPath}`,
+			null as T,
+		)
+	}
 
-        return handleStorageResponse<any>(data, error, `REMOVE ${bucket}`)
-    }
+	async function listBuckets<T = any>() {
+		const { data, error } = await supabaseClient.storage.listBuckets()
+		return handleStorageResponse<T[]>({ data: data as T[] | null, error }, 'LIST_BUCKETS', [])
+	}
 
-    // ############################################################
-    // # URLS (public / signées)
-    // ############################################################
+	async function getBucket<T = any>(bucketName: string) {
+		const { data, error } = await supabaseClient.storage.getBucket(bucketName)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `GET_BUCKET ${bucketName}`, null as T)
+	}
 
-    /**
-     * Retourne l’URL publique d’un fichier.
-     * (Ne fait pas d’appel réseau, c’est calculé côté client)
-     *
-     * Exemple :
-     *   const url = getPublicUrl('songs', 'covers/123.png')
-     */
-    function getPublicUrl(
-        bucket: string,
-        path: string,
-        options?: {
-            download?: boolean
-            transform?: {
-                width?: number
-                height?: number
-                resize?: 'cover' | 'contain' | 'fill'
-                quality?: number
-                format?: 'origin' | 'webp' | 'png' | 'jpeg'
-            }
-        }
-    ) {
-        const { data } = supabase
-            .storage
-            .from(bucket)
-            .getPublicUrl(path, options as any)
+	async function createBucket<T = any>(bucketName: string, options: StorageCreateBucketOptions = {}) {
+		const { data, error } = await supabaseClient.storage.createBucket(bucketName, normalizeBucketOptions(options))
+		return handleStorageResponse<T>({ data: data as T | null, error }, `CREATE_BUCKET ${bucketName}`, null as T)
+	}
 
-        return data?.publicUrl ?? null
-    }
+	async function updateBucket<T = any>(bucketName: string, options: StorageCreateBucketOptions) {
+		const { data, error } = await supabaseClient.storage.updateBucket(bucketName, normalizeBucketOptions(options))
+		return handleStorageResponse<T>({ data: data as T | null, error }, `UPDATE_BUCKET ${bucketName}`, null as T)
+	}
 
-    /**
-     * Crée une URL signée (temporaire).
-     *
-     * Exemple :
-     *   const { success, data } = await createSignedUrl('songs', 'covers/123.png', 60)
-     *   // data?.signedUrl
-     */
-    async function createSignedUrl(
-        bucket: string,
-        path: string,
-        expiresIn: number = 60 // secondes
-    ) {
-        const { data, error } = await supabase
-            .storage
-            .from(bucket)
-            .createSignedUrl(path, expiresIn)
+	async function deleteBucket<T = any>(bucketName: string) {
+		const { data, error } = await supabaseClient.storage.deleteBucket(bucketName)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `DELETE_BUCKET ${bucketName}`, null as T)
+	}
 
-        return handleStorageResponse<{ signedUrl: string } | null>(
-            data,
-            error,
-            `SIGNED_URL ${bucket}/${path}`,
-        )
-    }
+	async function emptyBucket<T = any>(bucketName: string) {
+		const { data, error } = await supabaseClient.storage.emptyBucket(bucketName)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `EMPTY_BUCKET ${bucketName}`, null as T)
+	}
 
-    // ############################################################
-    // # MOVE / COPY
-    // ############################################################
-
-    /**
-     * Déplace un fichier dans le même bucket.
-     *
-     * Exemple :
-     *   move('songs', 'tmp/123.png', 'covers/123.png')
-     */
-    async function move(
-        bucket: string,
-        fromPath: string,
-        toPath: string
-    ) {
-        const { data, error } = await supabase
-            .storage
-            .from(bucket)
-            .move(fromPath, toPath)
-
-        return handleStorageResponse<any>(
-            data,
-            error,
-            `MOVE ${bucket} ${fromPath} -> ${toPath}`,
-        )
-    }
-
-    /**
-     * Copie un fichier dans le même bucket.
-     *
-     * Exemple :
-     *   copy('songs', 'covers/123.png', 'covers/backups/123.png')
-     */
-    async function copy(
-        bucket: string,
-        fromPath: string,
-        toPath: string
-    ) {
-        const { data, error } = await supabase
-            .storage
-            .from(bucket)
-            .copy(fromPath, toPath)
-
-        return handleStorageResponse<any>(
-            data,
-            error,
-            `COPY ${bucket} ${fromPath} -> ${toPath}`,
-        )
-    }
-
-    // ############################################################
-    // # API exposée
-    // ############################################################
-
-    return {
-        // listing
-        list,
-        all, // alias
-
-        // fichiers
-        upload,
-        download,
-        get,      // alias de download
-        remove,
-
-        // urls
-        getPublicUrl,
-        createSignedUrl,
-
-        // gestion chemin
-        move,
-        copy,
-    }
+	return {
+		list,
+		upload,
+		update,
+		download,
+		remove,
+		getPublicUrl,
+		createSignedUrl,
+		createSignedUrls,
+		createSignedUploadUrl,
+		uploadToSignedUrl,
+		move,
+		copy,
+		listBuckets,
+		getBucket,
+		createBucket,
+		updateBucket,
+		deleteBucket,
+		emptyBucket,
+		joinPath,
+		normalizePath,
+	}
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels' // ⬅️ util à créer (voir plus haut)
+import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels'
 import NsdbRelationSelect from './Form/NsdbRelationSelect.vue'
 import type { EntityRelation } from '@lucashw68/nsdb/types/entities'
 
@@ -9,6 +9,16 @@ type NsdbFormMode = 'create' | 'edit'
 type Label = {
 	key: string
 	label: string
+}
+
+type NsdbFormModel = {
+	items?: unknown
+	schema: Record<string, any>
+	new?: () => Record<string, any>
+	getById?: (id: string | number) => Promise<Record<string, any> | null>
+	create?: (payload: Record<string, any>) => Promise<any>
+	update?: (id: string | number, payload: Record<string, any>) => Promise<any>
+	relatedModels?: Record<string, NsdbFormModel>
 }
 
 const props = defineProps<{
@@ -26,17 +36,15 @@ const emit = defineEmits<{
 	(e: 'error', error: any): void
 }>()
 
-// 🔥 DX handle générique (playlists, songs, etc.)
-const nsdbModel = useNsdbModel(props.model, { store: false })
-const nsdbSchema = nsdbModel.schema
+// DX handle générique (playlists, songs, etc.)
+const nsdbModel = useNsdbModel(props.model, { store: false }) as NsdbFormModel
+const nsdbSchema = nsdbModel.schema as Record<string, any>
 
 // ------------------------
 // Modèles liés (belongsTo)
 // ------------------------
 
-type NsdbAnyModel = ReturnType<typeof useNsdbModel<any>>
-
-const relatedModels: Record<string, NsdbAnyModel> = {}
+const relatedModels: Record<string, NsdbFormModel> = {}
 
 if (nsdbSchema && typeof nsdbSchema === 'object') {
 	for (const def of Object.values(nsdbSchema as Record<string, any>)) {
@@ -45,7 +53,7 @@ if (nsdbSchema && typeof nsdbSchema === 'object') {
 			const table = relation.referencedTable
 			if (!relatedModels[table]) {
 				try {
-					relatedModels[table] = useNsdbModel(table, { store: false }) as NsdbAnyModel
+					relatedModels[table] = useNsdbModel(table, { store: false }) as NsdbFormModel
 				} catch (e) {
 					console.warn('[NsdbForm] Impossible d’initialiser le modèle lié pour', table, e)
 				}
@@ -69,10 +77,10 @@ function splitInitialValuesByRelation(
 		// pas de point → champ de l’entité principale
 		if (!fullKey.includes('.')) {
 			root[fullKey] = value
-			continue // 👈 AVANT c'était `return` → bug
+			continue
 		}
 
-		const [prefix, childKey] = fullKey.split('.', 2)
+		const [prefix = '', childKey = ''] = fullKey.split('.', 2)
 		if (!childKey) continue
 
 		let relationFieldKey: string | null = null
@@ -102,17 +110,19 @@ function splitInitialValuesByRelation(
 			continue
 		}
 
-		if (!perRelation[relationFieldKey]) {
-			perRelation[relationFieldKey] = {}
+		const resolvedRelationKey = relationFieldKey
+
+		if (!perRelation[resolvedRelationKey]) {
+			perRelation[resolvedRelationKey] = {}
 		}
-		perRelation[relationFieldKey][childKey] = value
+		perRelation[resolvedRelationKey][childKey] = value
 	}
 
 	return { root, perRelation }
 }
 
 const parsedInitialValues = computed(() =>
-	splitInitialValuesByRelation(props.initialValues ?? {}, nsdbSchema as any)
+	splitInitialValuesByRelation(props.initialValues ?? {}, nsdbSchema as Record<string, any>)
 )
 
 const rootInitialValues = computed(
@@ -190,8 +200,8 @@ async function load() {
 	try {
 		let existing: any = null
 
-		if (typeof nsdbModel.get === 'function') {
-			existing = await nsdbModel.get(props.id)
+		if (typeof nsdbModel.getById === 'function') {
+			existing = await nsdbModel.getById(props.id)
 		}
 
 		if (!existing) {
@@ -317,6 +327,7 @@ async function resolveRelationsAndBuildPayload(): Promise<Record<string, any>> {
 					)
 					continue
 				}
+				const createRelatedEntity = model.create
 
 				relationCreationPromises.push(
 					(async () => {
@@ -336,7 +347,7 @@ async function resolveRelationsAndBuildPayload(): Promise<Record<string, any>> {
 						}
 
 						// 2) création de l’entité liée
-						const created = await model.create(childData)
+							const created = await createRelatedEntity(childData)
 						if (!created) {
 							throw new Error(
 								`[nsdb] Échec de la création liée pour ${table}`
@@ -392,10 +403,10 @@ async function submitToModel(payload: Record<string, any>): Promise<any> {
 	if (props.id == null) {
 		throw new Error('Impossible de mettre à jour : aucun id fourni.')
 	}
-	if (typeof nsdbModel.edit !== 'function') {
-		throw new Error('Le DX handle ne définit pas de méthode edit().')
+	if (typeof nsdbModel.update !== 'function') {
+		throw new Error('Le DX handle ne définit pas de méthode update().')
 	}
-	const result = await nsdbModel.edit(props.id, payload)
+	const result = await nsdbModel.update(props.id, payload)
 	emit('updated', result)
 	return result
 }
@@ -520,7 +531,6 @@ async function onSubmit() {
 					:disabled="loading || saving"
 					@change="setField(key, ($event.target as HTMLSelectElement).value)"
 				>
-					<p>SELECT</p>
 					<option value="" disabled>Sélectionnez une option</option>
 					<option
 						v-for="opt in nsdbSchema[key]?.options || []"
@@ -575,13 +585,13 @@ async function onSubmit() {
 			name="actions"
 			:mode="mode"
 			:saving="saving"
-			:can-submit="!saving && !loading && !missingRequiredHiddenFields.length"
+			:can-submit="!saving && !loading && missingRequiredHiddenFields.length === 0"
 		>
 			<div class="flex justify-end gap-2">
 				<button
 					type="submit"
 					class="px-4 py-2 rounded bg-indigo-600 text-white text-sm disabled:opacity-50"
-					:disabled="saving || loading || missingRequiredHiddenFields.length"
+					:disabled="saving || loading || missingRequiredHiddenFields.length > 0"
 				>
 					<span v-if="saving">
 						Enregistrement…

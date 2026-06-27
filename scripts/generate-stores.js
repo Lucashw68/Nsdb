@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from 'path'
 import { parseArgs } from '../helpers/args.js'
+import { getBoolOption, getOption, loadNsdbConfig } from '../helpers/config.js'
 import { exists, listFiles, writeText, ensureDir } from '../helpers/io.js'
 import { toPascal, storeName } from '../helpers/names.js'
 
@@ -25,19 +26,20 @@ export type ${rowTypeName} = Tables<'${tableName}'>
 
 export const ${storeIdentifier} = createDbStore<${rowTypeName}>('${tableName}', {
 	key: 'id',
-	orderBy: 'updated_at',
+	orderBy: 'id',
 	defaultSort: 'desc',
 })
 `
 }
 
-function main() {
+async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
-	const modelsDirectoryPath = path.resolve(currentWorkingDirectory, parsedArguments.get('models-dir', 'nsdb/models'))
-	const storesDirectoryPath = path.resolve(currentWorkingDirectory, parsedArguments.get('stores-dir', 'stores'))
-	const typesImportPath = parsedArguments.get('types-import-path', '~/types/database.types')
-	const shouldOverwriteExisting = parsedArguments.getBool('force', false)
+	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
+	const modelsDirectoryPath = path.resolve(currentWorkingDirectory, getOption(parsedArguments, config, 'models-dir', 'paths.models'))
+	const storesDirectoryPath = path.resolve(currentWorkingDirectory, getOption(parsedArguments, config, 'stores-dir', 'paths.stores'))
+	const typesImportPath = getOption(parsedArguments, config, 'types-import-path', 'imports.databaseTypes')
+	const shouldOverwriteExisting = getBoolOption(parsedArguments, config, 'force', 'generators.force', false)
 
 	const tableNames = loadTableNames(modelsDirectoryPath)
 	if (!tableNames.length) {
@@ -64,4 +66,10 @@ function main() {
 	}
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+if (import.meta.url === `file://${process.argv[1]}`) {
+	main().catch((error) => {
+		console.error('❌ Unexpected error while generating stores.')
+		console.error(error)
+		process.exit(1)
+	})
+}

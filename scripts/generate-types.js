@@ -3,6 +3,7 @@ import path from 'path'
 import { parseArgs } from '../helpers/args.js'
 import { ensureDir } from '../helpers/io.js'
 import { run, isAvailable } from '../helpers/shell.js'
+import { getBoolOption, getOption, loadNsdbConfig } from '../helpers/config.js'
 
 /**
  * Build the Supabase CLI command that dumps the database types to disk.
@@ -30,13 +31,14 @@ async function loadDotenvIfAvailable(dotenvFilePath) {
 async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
+	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
 	const dotenvFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('dotenv', '.env'))
 	await loadDotenvIfAvailable(dotenvFilePath)
 
-	const outputFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('out', 'types/database.types.ts'))
-	const projectId = parsedArguments.get('project-id', process.env.SUPABASE_PROJECT_ID || '')
-	const schemaName = parsedArguments.get('schema', 'public')
-	const useLinkedProject = parsedArguments.getBool('linked', false)
+	const outputFilePath = path.resolve(currentWorkingDirectory, getOption(parsedArguments, config, 'out', 'paths.types'))
+	const projectId = getOption(parsedArguments, config, 'project-id', 'supabase.projectId', process.env.SUPABASE_PROJECT_ID || '')
+	const schemaName = getOption(parsedArguments, config, 'schema', 'supabase.schema', 'public')
+	const useLinkedProject = getBoolOption(parsedArguments, config, 'linked', 'supabase.linked', false)
 
 	if (!useLinkedProject && !projectId) {
 		console.error('❌ Missing SUPABASE_PROJECT_ID (pass --project-id or --linked).')

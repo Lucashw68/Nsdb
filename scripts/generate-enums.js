@@ -2,6 +2,7 @@
 import path from 'path'
 import { exists, ensureDir, writeText } from '../helpers/io.js'
 import { parseArgs } from '../helpers/args.js'
+import { getOption, loadNsdbConfig } from '../helpers/config.js'
 import {
 	createTsProject,
 	addSourceFile,
@@ -61,12 +62,13 @@ function buildContent(databaseImportPath, descriptors) {
 	return [...headerLines, ...enumBlocks, ...enumMapLines].join('\n')
 }
 
-function main() {
+async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
-	const typesFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('types', 'types/database.types.ts'))
-	const outputFilePath = path.resolve(currentWorkingDirectory, parsedArguments.get('out', 'nsdb/enums.ts'))
-	const databaseImportPath = parsedArguments.get('db-import-path', '~/types/database.types')
+	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
+	const typesFilePath = path.resolve(currentWorkingDirectory, getOption(parsedArguments, config, 'types', 'paths.types'))
+	const outputFilePath = path.resolve(currentWorkingDirectory, getOption(parsedArguments, config, 'out', 'paths.enums'))
+	const databaseImportPath = getOption(parsedArguments, config, 'db-import-path', 'imports.databaseTypes')
 
 	if (!exists(typesFilePath)) {
 		console.error(`❌ Missing types file: ${typesFilePath}`)
@@ -95,4 +97,10 @@ function main() {
 	console.log(`✅ enums: ${path.relative(currentWorkingDirectory, outputFilePath)} — ${descriptors.length} enum(s)`)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+if (import.meta.url === `file://${process.argv[1]}`) {
+	main().catch((error) => {
+		console.error('❌ Unexpected error while generating enums.')
+		console.error(error)
+		process.exit(1)
+	})
+}

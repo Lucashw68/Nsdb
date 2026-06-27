@@ -1,4 +1,5 @@
-import { skipHydrate } from 'pinia'
+import { ref } from 'vue'
+import { defineStore } from '#imports'
 
 export interface SingletonStoreOptions<T> {
     /** Fonction de chargement de la ressource depuis Supabase ou autre */
@@ -56,11 +57,11 @@ export function createSingletonStore<T>(options: SingletonStoreOptions<T>) {
         }
 
         return {
-            data: skipHydrate(data),
-            loading: skipHydrate(loading),
-            error: skipHydrate(error),
+            data,
+            loading,
+            error,
             fetch: fetchData,
             update: updateData
         }
-    }, { persist })
+    }, { persist } as any)
 }

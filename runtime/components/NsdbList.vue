@@ -1,45 +1,16 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels'
-
-console.warn('[NsdbList] PAGINATED + COUNT + SEARCH + VARIANT + RENDERLESS')
-
-type Column = {
-	key: string
-	label: string
-	format?: (value: any, row: any) => string
-}
-
-type NsdbTableClasses = {
-	wrapper: string
-	headerWrapper: string
-	headerTitle: string
-	headerSubtitle: string
-	error: string
-	tableContainer: string
-	table: string
-	thead: string
-	theadRow: string
-	th: string
-	actionsTh: string
-	loadingCell: string
-	emptyCell: string
-	bodyRow: string
-	td: string
-	actionsTd: string
-	deleteButton: string
-	footer: string
-	pagination: string
-	pageButton: string
-	pageButtonActive: string
-	pageButtonDisabled: string
-}
+import * as nsdbSchemas from '~~/nsdb/schemas'
+import type { Column, NsdbTableClasses, OrderDirection, SortState, WhereClause } from '@lucashw68/nsdb/types/list'
 
 const defaultClasses: NsdbTableClasses = {
 	wrapper: 'w-full space-y-3',
 	headerWrapper: 'flex items-center justify-between',
 	headerTitle: 'text-lg font-semibold capitalize mb-2',
 	headerSubtitle: 'text-sm opacity-70',
+	toolbar: 'flex flex-col md:flex-row md:items-center gap-2',
+	searchInput: 'border text-black rounded px-3 py-2 w-full md:max-w-xs text-sm',
 	error: 'text-sm text-red-600',
 	tableContainer: 'border w-full overflow-x-auto',
 	table: 'nsdb-table w-full text-sm',
@@ -64,34 +35,39 @@ const props = defineProps<{
 	model: string
 	columns?: Column[]
 	pageSize?: number
-	query?: any
+	query?: {
+		select?: string
+		where?: WhereClause
+		orderBy?: string
+		orderDirection?: OrderDirection
+		orderForeignTable?: string
+		limit?: number
+		offset?: number
+		search?: string
+		searchColumns?: string[]
+	}
+	filters?: WhereClause
+	sortBy?: string
+	sortDirection?: OrderDirection
 	classes?: Partial<NsdbTableClasses>
 	unstyled?: boolean
 	variant?: 'table' | 'cards'
-	/**
-	 * Pagination UI: nombre de pages affichées autour de la page courante
-	 * ex: 2 => [.., p-2, p-1, p, p+1, p+2, ..]
-	 */
 	pageWindow?: number
-	/**
-	 * Afficher "Première / Dernière"
-	 */
 	showFirstLast?: boolean
-	/**
-	 * Afficher la pagination numérotée (en plus de précédent/suivant)
-	 */
 	showPageNumbers?: boolean
+	searchable?: boolean
+	search?: string
+	searchColumns?: string[]
+	searchPlaceholder?: string
+	searchDebounceMs?: number
 }>()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
 
 const nsdbModel = useNsdbModel(props.model, { store: false })
-
 const rows = computed(() => nsdbModel.items.value ?? [])
-
 const totalCount = computed<number | null>(() => {
-	// useSupabaseModel patch: totalCount ref
 	return (nsdbModel as any)?.totalCount?.value ?? null
 })
 
@@ -121,8 +97,7 @@ const totalPages = computed<number | null>(() => {
 const classes = computed<NsdbTableClasses>(() => {
 	if (props.unstyled) {
 		return Object.keys(defaultClasses).reduce((acc, key) => {
-			// @ts-expect-error
-			acc[key] = ''
+			acc[key as keyof NsdbTableClasses] = ''
 			return acc
 		}, {} as NsdbTableClasses)
 	}
@@ -133,22 +108,10 @@ const classes = computed<NsdbTableClasses>(() => {
 	}
 })
 
-type SortState = {
-	key: string | null
-	direction: 'asc' | 'desc' | null
-}
-
-const sortState = ref<SortState>({ key: null, direction: null })
-
 const canGoPrev = computed(() => currentPage.value > 1)
 
 const canGoNext = computed(() => {
-	// Si on connaît le total, c'est fiable
-	if (totalPages.value != null) {
-		return currentPage.value < totalPages.value
-	}
-
-	// Fallback si on n'a pas le total (ex: store mode / count absent)
+	if (totalPages.value != null) return currentPage.value < totalPages.value
 	if (!pageSize.value) return rows.value.length > 0
 	return rows.value.length === pageSize.value
 })
@@ -156,8 +119,11 @@ const canGoNext = computed(() => {
 const pageWindow = computed(() => props.pageWindow ?? 2)
 const showFirstLast = computed(() => props.showFirstLast ?? true)
 const showPageNumbers = computed(() => props.showPageNumbers ?? true)
+const searchTerm = ref(props.search ?? '')
+const debouncedSearchTerm = ref(props.search ?? '')
+let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null
 
-const pageItems = computed<(number | '…')[]>(() => {
+const pageItems = computed<(number | '...')[]>(() => {
 	if (!showPageNumbers.value) return []
 	if (totalPages.value == null) return []
 
@@ -165,21 +131,20 @@ const pageItems = computed<(number | '…')[]>(() => {
 	const cp = currentPage.value
 	const w = Math.max(0, pageWindow.value)
 
-	// cas petit
 	if (tp <= 1) return [1]
 	if (tp <= 2 + 2 * w + 2) {
 		return Array.from({ length: tp }, (_, i) => i + 1)
 	}
 
-	const items: (number | '…')[] = []
+	const items: (number | '...')[] = []
 	const start = Math.max(2, cp - w)
 	const end = Math.min(tp - 1, cp + w)
 
 	items.push(1)
 
-	if (start > 2) items.push('…')
+	if (start > 2) items.push('...')
 	for (let p = start; p <= end; p++) items.push(p)
-	if (end < tp - 1) items.push('…')
+	if (end < tp - 1) items.push('...')
 
 	items.push(tp)
 	return items
@@ -200,16 +165,98 @@ const effectiveColumns = computed<Column[]>(() => {
 	return Object.keys(first).map(key => ({ key, label: key }))
 })
 
-function toggleSort(column: Column) {
+function toPascalCase(value: string) {
+	return value
+		.split(/[^a-zA-Z0-9]/)
+		.filter(Boolean)
+		.map(part => part.charAt(0).toUpperCase() + part.slice(1))
+		.join('')
+}
+
+const modelSchema = computed<Record<string, any> | null>(() => {
+	const schemaExportName = `${toPascalCase(props.model)}Schema`
+	return (nsdbSchemas as Record<string, any>)[schemaExportName] ?? null
+})
+
+function isTextSearchColumn(columnKey: string) {
+	const schema = modelSchema.value
+	if (!schema) return true
+	if (columnKey.includes('.')) return true
+
+	const field = schema[columnKey]
+	if (!field) return true
+
+	const isTextField = field.type === 'text' || field.type === 'textarea'
+	if (!isTextField) {
+		console.warn(
+			`[NsdbList] "${columnKey}" ignored from searchColumns on "${props.model}" because its schema type is "${field.type}". Use filters for non-text columns.`
+		)
+	}
+
+	return isTextField
+}
+
+function isSortableColumn(columnKey: string) {
+	if (columnKey.includes('.')) {
+		console.warn(
+			`[NsdbList] "${columnKey}" cannot be sorted automatically because it is a relation path. Configure query.orderBy/orderForeignTable manually if needed.`
+		)
+		return false
+	}
+
+	return true
+}
+
+const effectiveSearchColumns = computed(() => {
+	if (props.searchColumns?.length) {
+		return props.searchColumns.filter(isTextSearchColumn)
+	}
+
+	if (props.query?.searchColumns?.length) {
+		return props.query.searchColumns.filter(isTextSearchColumn)
+	}
+
+	return effectiveColumns.value
+		.map(column => column.key)
+		.filter(columnKey => !columnKey.includes('.'))
+		.filter(isTextSearchColumn)
+})
+
+const effectiveSearch = computed(() => {
+	const localSearch = debouncedSearchTerm.value.trim()
+	if (localSearch) return localSearch
+	return props.query?.search ?? ''
+})
+
+function setSearchTerm(value: string) {
+	searchTerm.value = value
+}
+
+const sortState = ref<SortState>({
+	key: props.sortBy ?? null,
+	direction: props.sortBy ? props.sortDirection ?? 'asc' : null,
+})
+
+async function setSort(key: string | null, direction: OrderDirection | null = 'asc') {
+	if (key && !isSortableColumn(key)) return
+
+	sortState.value = { key, direction: key ? direction : null }
+	currentPage.value = 1
+	await load()
+}
+
+async function toggleSort(column: Column) {
 	if (sortState.value.key !== column.key) {
-		sortState.value = { key: column.key, direction: 'asc' }
+		await setSort(column.key, 'asc')
 		return
 	}
+
 	if (sortState.value.direction === 'asc') {
-		sortState.value = { key: column.key, direction: 'desc' }
+		await setSort(column.key, 'desc')
 		return
 	}
-	sortState.value = { key: null, direction: null }
+
+	await setSort(null, null)
 }
 
 function getDeep(row: any, path: unknown) {
@@ -238,49 +285,42 @@ function getDeep(row: any, path: unknown) {
 	return current
 }
 
-const sortedRows = computed(() => {
-	const base = [...rows.value]
-	const key = sortState.value.key
-	const direction = sortState.value.direction
+const effectiveWhere = computed<WhereClause | undefined>(() => {
+	const mergedWhere = {
+		...(props.query?.where ?? {}),
+		...(props.filters ?? {}),
+	}
 
-	if (!key || !direction) return base
-
-	return base.sort((a, b) => {
-		const valueA = getDeep(a, key)
-		const valueB = getDeep(b, key)
-
-		const stringA = valueA == null ? '' : String(valueA).toLowerCase()
-		const stringB = valueB == null ? '' : String(valueB).toLowerCase()
-
-		const comparison = stringA.localeCompare(stringB)
-		return direction === 'asc' ? comparison : -comparison
-	})
+	return Object.keys(mergedWhere).length > 0 ? mergedWhere : undefined
 })
+
+const serverQuery = computed(() => {
+	const baseQuery = props.query ?? {}
+
+	// Requête unique consommée par le modèle: recherche, filtres, tri et pagination restent côté Supabase.
+	return {
+		...baseQuery,
+		where: effectiveWhere.value,
+		orderBy: sortState.value.key ?? props.sortBy ?? baseQuery.orderBy,
+		orderDirection: sortState.value.direction ?? props.sortDirection ?? baseQuery.orderDirection,
+		limit: effectiveLimit.value,
+		offset: effectiveOffset.value,
+		search: effectiveSearch.value || undefined,
+		searchColumns: effectiveSearchColumns.value,
+	}
+})
+
+const displayRows = computed(() => rows.value)
 
 async function load() {
 	loading.value = true
 	error.value = null
 
 	try {
-		const baseQuery = props.query ?? {}
-
-		const finalQuery = {
-			...baseQuery,
-			limit: effectiveLimit.value,
-			offset: effectiveOffset.value,
-		}
-
-		// 1) si le modèle expose all()
-		if (typeof (nsdbModel as any).all === 'function') {
-			await (nsdbModel as any).all(finalQuery)
-		}
-		// 2) sinon si fetch()
-		else if (typeof (nsdbModel as any).fetch === 'function') {
-			await (nsdbModel as any).fetch(finalQuery)
-		}
-		// 3) sinon on ne peut pas
-		else {
-			console.warn('[NsdbList] No all() nor fetch() found on nsdbModel for', props.model)
+		if (typeof (nsdbModel as any).fetch === 'function') {
+			await (nsdbModel as any).fetch(serverQuery.value)
+		} else {
+			console.warn('[NsdbList] No fetch() found on nsdbModel for', props.model)
 		}
 	} catch (e: any) {
 		error.value = e?.message ?? 'Erreur de chargement'
@@ -321,7 +361,13 @@ async function handleLastPage() {
 }
 
 watch(
-	() => [props.model, props.pageSize, props.query],
+	() => [
+		props.model,
+		props.pageSize,
+		props.query,
+		props.filters,
+		props.searchColumns,
+	],
 	() => {
 		currentPage.value = 1
 		load()
@@ -329,21 +375,50 @@ watch(
 	{ immediate: true, deep: true }
 )
 
+watch(
+	() => [props.sortBy, props.sortDirection] as const,
+	([sortBy, sortDirection]) => {
+		sortState.value = {
+			key: sortBy ?? null,
+			direction: sortBy ? sortDirection ?? 'asc' : null,
+		}
+		currentPage.value = 1
+		load()
+	}
+)
+
+watch(
+	() => props.search,
+	(searchValue) => {
+		searchTerm.value = searchValue ?? ''
+	}
+)
+
+watch(
+	searchTerm,
+	(searchValue) => {
+		if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout)
+
+		searchDebounceTimeout = setTimeout(() => {
+			debouncedSearchTerm.value = searchValue
+			currentPage.value = 1
+			load()
+		}, props.searchDebounceMs ?? 300)
+	}
+)
+
 async function handleDelete(row: any) {
 	const id = row?.id
 	if (id == null) return
 
 	try {
-		if (typeof (nsdbModel as any).delete === 'function') {
-			await (nsdbModel as any).delete(id)
-		} else if (typeof (nsdbModel as any).remove === 'function') {
+		if (typeof (nsdbModel as any).remove === 'function') {
 			await (nsdbModel as any).remove(id)
 		} else {
-			console.warn('[NsdbList] No delete/remove method found on nsdbModel for', props.model)
+			console.warn('[NsdbList] No remove() method found on nsdbModel for', props.model)
 			return
 		}
 
-		// Après suppression, si on est hors bornes (ex: dernière page devenue vide), on recale.
 		if (totalPages.value != null && currentPage.value > totalPages.value) {
 			currentPage.value = totalPages.value
 		}
@@ -356,16 +431,19 @@ async function handleDelete(row: any) {
 </script>
 
 <template>
-	<!-- Renderless slot: expose all data/actions + pagination meta -->
 	<slot
 		:model="props.model"
-		:rows="sortedRows"
+		:rows="displayRows"
 		:raw-rows="rows"
 		:columns="effectiveColumns"
 		:loading="loading"
 		:error="error"
+		:query="serverQuery"
+		:filters="effectiveWhere"
+		:sort-state="sortState"
+		:set-sort="setSort"
 		:current-page="currentPage"
-		:page-size="pageSize"
+		:page-size="effectiveLimit"
 		:limit="effectiveLimit"
 		:offset="effectiveOffset"
 		:total-count="totalCount"
@@ -378,11 +456,12 @@ async function handleDelete(row: any) {
 		:prev-page="handlePrevPage"
 		:next-page="handleNextPage"
 		:delete-row="handleDelete"
+		:search="searchTerm"
+		:search-columns="effectiveSearchColumns"
+		:set-search="setSearchTerm"
 		:reload="load"
 	>
-		<!-- Default UI -->
 		<div :class="classes.wrapper">
-			<!-- HEADER -->
 			<div :class="classes.headerWrapper">
 				<slot
 					name="header"
@@ -390,6 +469,9 @@ async function handleDelete(row: any) {
 					:rows="rows"
 					:loading="loading"
 					:error="error"
+					:query="serverQuery"
+					:filters="effectiveWhere"
+					:sort-state="sortState"
 					:columns="effectiveColumns"
 					:current-page="currentPage"
 					:total-count="totalCount"
@@ -401,7 +483,7 @@ async function handleDelete(row: any) {
 						</h3>
 						<div v-if="totalCount != null" :class="classes.headerSubtitle">
 							{{ totalCount }} éléments
-							<span v-if="totalPages"> — page {{ currentPage }} / {{ totalPages }}</span>
+							<span v-if="totalPages"> - page {{ currentPage }} / {{ totalPages }}</span>
 						</div>
 						<div v-else-if="rows.length" :class="classes.headerSubtitle">
 							{{ rows.length }} éléments (page {{ currentPage }})
@@ -410,36 +492,54 @@ async function handleDelete(row: any) {
 				</slot>
 			</div>
 
-			<!-- ERROR -->
+			<slot
+				name="toolbar"
+				:search="searchTerm"
+				:search-columns="effectiveSearchColumns"
+				:set-search="setSearchTerm"
+				:query="serverQuery"
+				:filters="effectiveWhere"
+				:sort-state="sortState"
+				:set-sort="setSort"
+				:reload="load"
+			>
+				<div v-if="props.searchable" :class="classes.toolbar">
+					<input
+						v-model="searchTerm"
+						type="search"
+						:class="classes.searchInput"
+						:placeholder="props.searchPlaceholder ?? 'Rechercher...'"
+						:disabled="loading"
+					/>
+				</div>
+			</slot>
+
 			<slot name="error" v-if="error" :error="error">
 				<div :class="classes.error">
 					{{ error }}
 				</div>
 			</slot>
 
-			<!-- CONTENT -->
-			<!-- 🃏 CARDS VARIANT -->
 			<div v-if="props.variant === 'cards'">
-				<!-- LOADING -->
 				<template v-if="loading">
 					<slot name="loading" :columns="effectiveColumns">
-						<div :class="classes.loadingCell">Chargement…</div>
+						<div :class="classes.loadingCell">Chargement...</div>
 					</slot>
 				</template>
 
-				<!-- EMPTY -->
-				<template v-else-if="sortedRows.length === 0">
+				<template v-else-if="displayRows.length === 0">
 					<slot name="empty" :columns="effectiveColumns">
-						<div :class="classes.emptyCell">Aucun résultat</div>
+						<div :class="classes.emptyCell">
+							Aucun résultat
+						</div>
 					</slot>
 				</template>
 
-				<!-- CARDS -->
 				<template v-else>
-					<slot name="cards" :rows="sortedRows" :columns="effectiveColumns">
+					<slot name="cards" :rows="displayRows" :columns="effectiveColumns" :query="serverQuery">
 						<div class="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
 							<div
-								v-for="row in sortedRows"
+								v-for="row in displayRows"
 								:key="row.id ?? JSON.stringify(row)"
 								class="border rounded-lg p-4 shadow-sm bg-white"
 							>
@@ -473,7 +573,6 @@ async function handleDelete(row: any) {
 				</template>
 			</div>
 
-			<!-- 📊 TABLE VARIANT (default) -->
 			<div v-else :class="classes.tableContainer">
 				<table :class="classes.table">
 					<thead :class="classes.thead">
@@ -490,6 +589,8 @@ async function handleDelete(row: any) {
 										:column="column"
 										:sort-key="sortState.key"
 										:sort-direction="sortState.direction"
+										:sort-state="sortState"
+										:set-sort="setSort"
 										:toggle-sort="() => toggleSort(column)"
 									>
 										{{ column.label }}
@@ -506,19 +607,17 @@ async function handleDelete(row: any) {
 					</thead>
 
 					<tbody>
-						<!-- LOADING -->
 						<template v-if="loading">
 							<slot name="loading" :columns="effectiveColumns">
 								<tr>
 									<td :colspan="effectiveColumns.length + 1" :class="classes.loadingCell">
-										Chargement…
+										Chargement...
 									</td>
 								</tr>
 							</slot>
 						</template>
 
-						<!-- EMPTY -->
-						<template v-else-if="sortedRows.length === 0">
+						<template v-else-if="displayRows.length === 0">
 							<slot name="empty" :columns="effectiveColumns">
 								<tr>
 									<td :colspan="effectiveColumns.length + 1" :class="classes.emptyCell">
@@ -528,11 +627,10 @@ async function handleDelete(row: any) {
 							</slot>
 						</template>
 
-						<!-- BODY -->
 						<template v-else>
-							<slot name="body" :rows="sortedRows" :columns="effectiveColumns">
+							<slot name="body" :rows="displayRows" :columns="effectiveColumns" :query="serverQuery">
 								<tr
-									v-for="row in sortedRows"
+									v-for="row in displayRows"
 									:key="row.id ?? JSON.stringify(row)"
 									:class="classes.bodyRow"
 								>
@@ -575,13 +673,16 @@ async function handleDelete(row: any) {
 				</table>
 			</div>
 
-			<!-- FOOTER / PAGINATION -->
 			<div :class="classes.footer">
 				<slot
 					name="footer"
-					:rows="rows"
+					:rows="displayRows"
 					:columns="effectiveColumns"
 					:model="props.model"
+					:query="serverQuery"
+					:filters="effectiveWhere"
+					:sort-state="sortState"
+					:set-sort="setSort"
 					:current-page="currentPage"
 					:total-count="totalCount"
 					:total-pages="totalPages"
@@ -597,7 +698,7 @@ async function handleDelete(row: any) {
 					<div class="text-sm opacity-70">
 						Page {{ currentPage }}
 						<span v-if="totalPages"> / {{ totalPages }}</span>
-						<span v-if="totalCount != null"> — {{ totalCount }} éléments</span>
+						<span v-if="totalCount != null"> - {{ totalCount }} éléments</span>
 					</div>
 
 					<div :class="classes.pagination">
@@ -620,10 +721,9 @@ async function handleDelete(row: any) {
 							Précédent
 						</button>
 
-						<!-- Page numbers (si totalPages connu) -->
 						<template v-if="showPageNumbers && totalPages">
 							<template v-for="it in pageItems" :key="String(it) + '-' + currentPage">
-								<span v-if="it === '…'" class="px-2 opacity-60">…</span>
+								<span v-if="it === '...'" class="px-2 opacity-60">...</span>
 								<button
 									v-else
 									type="button"

@@ -1,30 +1,37 @@
-.PHONY: deploy push tag publish version
+SHELL := /usr/bin/env zsh
+.SHELLFLAGS := -lc
+
+.PHONY: check commit deploy publish push version
 
 # Default version type for version bump (patch, minor, major)
 VERSION_TYPE ?= patch
 
-# Read version from package.json
-VERSION := $(shell node -p "require('./package.json').version")
-
-# Commit message (pass via `make push MESSAGE='your message'`)
+# Commit message (pass via `make deploy MESSAGE='your message'`)
 MESSAGE ?= "update"
 
-deploy: push version tag publish
+NPM ?= npm
+YARN ?= yarn
 
-push:
+deploy: check commit version push publish
+
+check:
+	@echo "✅ Running checks..."
+	$(YARN) run check
+	$(YARN) run test
+
+commit:
 	@echo "🔄 Adding and committing changes..."
 	git add --all
 	git commit -m "$(MESSAGE)"
-	git push origin main
 
 version:
 	@echo "🔖 Bumping version ($(VERSION_TYPE))..."
-	npm version $(VERSION_TYPE)
+	$(NPM) version $(VERSION_TYPE)
 
-tag:
-	@echo "🏷️  Pushing tag v$(VERSION)..."
-	git push origin --tags
+push:
+	@echo "⬆️  Pushing main and tags..."
+	git push origin main --follow-tags
 
 publish:
 	@echo "🚀 Publishing to GitHub Packages..."
-	npm publish
+	$(NPM) publish

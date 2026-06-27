@@ -1,111 +1,205 @@
-import { skipHydrate, defineStore } from 'pinia'
+import { computed, shallowRef, ref, watch } from 'vue'
+import { defineStore, useSupabaseClient, useSupabaseUser } from '#imports'
+import { useSupabaseApi } from '../composables/useSupabaseApi'
+import type { ListOptions } from '@lucashw68/nsdb/types/list'
+
+export type DbStoreFetchOptions = ListOptions & {
+	force?: boolean
+	merge?: boolean
+	staleTimeMs?: number
+}
 
 export function createDbStore<T extends Record<string, any>>(resource: string, options: {
 	key?: keyof T
 	orderBy?: keyof T
 	defaultSort?: 'asc' | 'desc'
+	staleTimeMs?: number
+	persist?: boolean
+	scopeToUser?: boolean
 }) {
 	const key = options.key || 'id'
-	const orderBy = options.orderBy || 'updated_at'
+	const orderBy = options.orderBy || key
 	const sortDir = options.defaultSort || 'desc'
+	const defaultStaleTimeMs = options.staleTimeMs ?? 30_000
+	const shouldPersist = options.persist ?? true
+	const shouldScopeToUser = options.scopeToUser ?? true
 
 	return defineStore(`db_${resource}`, () => {
 		const supabase = useSupabaseClient()
-		const items = ref<T[]>([])
+		const supabaseUser = useSupabaseUser()
+		const api = useSupabaseApi()
+		const items = shallowRef<T[]>([])
+		const totalCount = ref<number | null>(null)
 		const loading = ref(false)
+		const error = ref<any>(null)
+		const lastFetchedAt = ref<number | null>(null)
+		const cachedQueries = new Map<string, { rows: T[]; fetchedAt: number }>()
 
 		let subscription: ReturnType<typeof supabase.channel> | null = null
 
-		const fetchFromSupabase = async () => {
-			loading.value = true
-			const lastUpdated = items.value.reduce((acc, item) => {
-				const ts = new Date(item.updated_at || 0).getTime()
-				return ts > acc ? ts : acc
-			}, 0)
-
-			let query = supabase
-				.from(resource)
-				.select('*')
-				.order(orderBy as string, { ascending: sortDir === 'asc' })
-
-			if (lastUpdated > 0) {
-				query = query.gte('updated_at', new Date(lastUpdated).toISOString())
-			}
-
-			const { data, error } = await query
-			if (error) {
-				console.error(`[${resource}] fetch error`, error)
-			} else if (data) {
-				mergeItems(data)
-			}
-
+		function reset() {
+			items.value = []
+			totalCount.value = null
 			loading.value = false
+			error.value = null
+			lastFetchedAt.value = null
+			cachedQueries.clear()
 		}
 
-		const mergeItems = (newItems: T[]) => {
-			const map = new Map(items.value.map(item => [item[key], item]))
-			for (const newItem of newItems) {
-				map.set(newItem[key], newItem)
+		if (shouldScopeToUser) {
+			watch(
+				() => supabaseUser.value?.id ?? null,
+				(newUserId, previousUserId) => {
+					if (previousUserId !== undefined && newUserId !== previousUserId) {
+						reset()
+					}
+				}
+			)
+		}
+
+		function getItemKey(item: Partial<T> | Record<string, any>) {
+			return item?.[key as string] as string | number | undefined
+		}
+
+		function getDefaultQuery(): ListOptions {
+			return {
+				orderBy: String(orderBy),
+				orderDirection: sortDir,
+				limit: 100,
+				offset: 0,
 			}
-			items.value = Array.from(map.values())
+		}
+
+		function getQuerySignature(query: ListOptions) {
+			return JSON.stringify({
+				select: query.select ?? '*',
+				where: query.where ?? null,
+				orderBy: query.orderBy ?? null,
+				orderDirection: query.orderDirection ?? null,
+				orderForeignTable: query.orderForeignTable ?? null,
+				limit: query.limit ?? null,
+				offset: query.offset ?? null,
+				search: query.search ?? null,
+				searchColumns: query.searchColumns ?? [],
+			})
+		}
+
+		const cachedCount = computed(() => items.value.length)
+
+		const mergeItems = (newItems: T[]) => {
+			const map = new Map<string | number | undefined, T>(items.value.map(item => [getItemKey(item), item]))
+			for (const newItem of newItems) {
+				map.set(getItemKey(newItem), newItem)
+			}
+			items.value = Array.from(map.values()).filter(Boolean) as T[]
+		}
+
+		const replaceItems = (newItems: T[]) => {
+			items.value = [...newItems]
 		}
 
 		const addOrUpdate = (item: T) => {
-			const index = items.value.findIndex(i => i[key] === item[key])
+			const itemKey = getItemKey(item)
+			const index = items.value.findIndex(candidate => getItemKey(candidate) === itemKey)
 			if (index !== -1) items.value[index] = item
 			else items.value.unshift(item)
 		}
 
-		const remove = (id: string | number) => {
-			items.value = items.value.filter(i => i[key] !== id)
+		const removeLocal = (id: string | number) => {
+			items.value = items.value.filter(item => getItemKey(item) !== id)
 		}
 
 		const getById = (id: string | number) => {
-			return items.value.find(i => i[key] === id) || null
+			return items.value.find(item => getItemKey(item) === id) || null
+		}
+
+		const fetchFromSupabase = async (query: DbStoreFetchOptions = {}) => {
+			loading.value = true
+			error.value = null
+
+			const {
+				force = false,
+				merge = true,
+				staleTimeMs = defaultStaleTimeMs,
+				...queryOptions
+			} = query
+			const finalQuery: ListOptions = {
+				...getDefaultQuery(),
+				...queryOptions,
+			}
+			const querySignature = getQuerySignature(finalQuery)
+			const cachedQuery = cachedQueries.get(querySignature)
+			const now = Date.now()
+
+			if (!force && cachedQuery && now - cachedQuery.fetchedAt < staleTimeMs) {
+				loading.value = false
+				return cachedQuery.rows
+			}
+
+			try {
+				const response = finalQuery.where && Object.keys(finalQuery.where).length > 0
+					? await api.find<T>(resource, finalQuery)
+					: await api.all<T>(resource, finalQuery)
+
+				if (!response.success) {
+					error.value = response.error
+					throw response.error
+				}
+
+				const rows = Array.isArray(response.data) ? response.data : []
+
+				if (merge) mergeItems(rows)
+				else replaceItems(rows)
+
+				totalCount.value = response.count ?? null
+				lastFetchedAt.value = now
+				cachedQueries.set(querySignature, { rows, fetchedAt: now })
+
+				return rows
+			} catch (fetchError) {
+				console.error(`[${resource}] fetch error`, fetchError)
+				error.value = fetchError
+				return []
+			} finally {
+				loading.value = false
+			}
 		}
 
 		const create = async (payload: Partial<T>): Promise<T | null> => {
-			const { data, error } = await supabase
-				.from(resource)
-				.insert(payload)
-				.select()
-				.single()
+			const response = await api.create<T>(resource, payload)
 
-			if (error) {
-				console.error(`[${resource}] create error`, error)
-				throw error
+			if (!response.success) {
+				console.error(`[${resource}] create error`, response.error)
+				throw response.error
 			}
+
+			const data = response.data as T
 			addOrUpdate(data)
 			return data
 		}
 
 		const update = async (id: string | number, payload: Partial<T>): Promise<T | null> => {
-			const { data, error } = await supabase
-				.from(resource)
-				.update(payload)
-				.eq(key as string, id)
-				.select()
-				.single()
+			const response = await api.update<T>(resource, id, payload)
 
-			if (error) {
-				console.error(`[${resource}] update error`, error)
-				throw error
+			if (!response.success) {
+				console.error(`[${resource}] update error`, response.error)
+				throw response.error
 			}
-			addOrUpdate(data)
-			return data
+
+			const data = Array.isArray(response.data) ? response.data[0] : response.data
+			if (data) addOrUpdate(data as T)
+			return (data as T | undefined) ?? null
 		}
 
 		const destroy = async (id: string | number) => {
-			const { error } = await supabase
-				.from(resource)
-				.delete()
-				.eq(key as string, id)
+			const response = await api.destroy(resource, id)
 
-			if (error) {
-				console.error(`[${resource}] delete error`, error)
-				throw error
+			if (!response.success) {
+				console.error(`[${resource}] delete error`, response.error)
+				throw response.error
 			}
-			remove(id)
+
+			removeLocal(id)
 		}
 
 		const subscribeToChanges = () => {
@@ -117,13 +211,13 @@ export function createDbStore<T extends Record<string, any>>(resource: string, o
 					event: '*',
 					schema: 'public',
 					table: resource
-				}, (payload) => {
+				}, (payload: any) => {
 					const { eventType, new: newItem, old } = payload
 
 					if (eventType === 'INSERT' || eventType === 'UPDATE') {
-						addOrUpdate(newItem)
+						addOrUpdate(newItem as T)
 					} else if (eventType === 'DELETE') {
-						remove(old[key])
+						removeLocal(old?.[key as string])
 					}
 				})
 				.subscribe()
@@ -132,16 +226,22 @@ export function createDbStore<T extends Record<string, any>>(resource: string, o
 		}
 
 		return {
-			items: skipHydrate(items),
-			loading: skipHydrate(loading),
+			items,
+			totalCount,
+			cachedCount,
+			loading,
+			error,
+			lastFetchedAt,
 			fetchFromSupabase,
 			addOrUpdate,
-			remove,
+			removeLocal,
+			reset,
+			remove: destroy,
+			destroy,
 			getById,
 			create,
 			update,
-			destroy,
 			subscribeToChanges
 		}
-	}, { persist: true })
+	}, { persist: shouldPersist } as any)
 }

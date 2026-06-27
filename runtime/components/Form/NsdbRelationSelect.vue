@@ -37,15 +37,15 @@ const rows = computed<any[]>(() => {
 })
 
 // valueField : clé utilisée comme valeur (id par défaut)
-const valueField = computed(() => {
+const valueField = computed<string>(() => {
 	if (props.relation.referencedColumns?.length) {
-		return props.relation.referencedColumns[0]
+		return props.relation.referencedColumns[0] ?? 'id'
 	}
 	return 'id'
 })
 
 // labelField : champ utilisé pour afficher l’option & créer inline
-const labelField = computed(() => {
+const labelField = computed<string>(() => {
 	if (props.relation.displayField) return props.relation.displayField
 	return valueField.value
 })
@@ -62,9 +62,10 @@ async function load() {
 	error.value = null
 
 	try {
-		await relatedModel.all({
+		await relatedModel.fetch({
 			limit: 200,
-			orderBy: { [valueField.value]: 'asc' },
+			orderBy: valueField.value,
+			orderDirection: 'asc',
 		})
 	} catch (e: any) {
 		console.error('[NsdbRelationSelect] load error:', e)

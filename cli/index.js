@@ -1,21 +1,27 @@
 #!/usr/bin/env node
 
-const { execSync } = require('node:child_process')
-const path = require('path')
+import { execSync } from 'node:child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const currentFilePath = fileURLToPath(import.meta.url)
+const currentDirectoryPath = path.dirname(currentFilePath)
 
 const commands = {
-	'clear': 				path.resolve(__dirname, '../scripts/clear.js'),
-	'generate:types': 		path.resolve(__dirname, '../scripts/generate-types.js'),
-	'generate:enums': 		path.resolve(__dirname, '../scripts/generate-enums.js'),
-	'generate:schemas':		path.resolve(__dirname, '../scripts/generate-schemas.js'),
-	'generate:models': 		path.resolve(__dirname, '../scripts/generate-models.js'),
-	'generate:composables': path.resolve(__dirname, '../scripts/generate-composables.js'),
+	'clear': path.resolve(currentDirectoryPath, '../scripts/clear.js'),
+	'generate:types': path.resolve(currentDirectoryPath, '../scripts/generate-types.js'),
+	'generate:enums': path.resolve(currentDirectoryPath, '../scripts/generate-enums.js'),
+	'generate:schemas': path.resolve(currentDirectoryPath, '../scripts/generate-schemas.js'),
+	'generate:models': path.resolve(currentDirectoryPath, '../scripts/generate-models.js'),
+	'generate:composables': path.resolve(currentDirectoryPath, '../scripts/generate-composables.js'),
 	'generate:all': [
-		path.resolve(__dirname, '../scripts/generate-types.js'),
-		path.resolve(__dirname, '../scripts/generate-enums.js'),
-		path.resolve(__dirname, '../scripts/generate-schemas.js'),
-		path.resolve(__dirname, '../scripts/generate-models.js'),
-		path.resolve(__dirname, '../scripts/generate-composables.js'),
+		path.resolve(currentDirectoryPath, '../scripts/generate-types.js'),
+		path.resolve(currentDirectoryPath, '../scripts/generate-enums.js'),
+		path.resolve(currentDirectoryPath, '../scripts/generate-schemas.js'),
+		path.resolve(currentDirectoryPath, '../scripts/generate-models.js'),
+		path.resolve(currentDirectoryPath, '../scripts/generate-stores.js'),
+		path.resolve(currentDirectoryPath, '../scripts/generate-models.js'),
+		path.resolve(currentDirectoryPath, '../scripts/generate-composables.js'),
 	]
 		.map(p => `node "${p}"`)
 		.join(' && ')

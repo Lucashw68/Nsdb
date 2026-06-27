@@ -1,5 +1,5 @@
 // __IMPORTS__
-import type { Tables } from '~/types/database.types'
+import type { Tables } from '~~/types/database.types'
 import { computed } from 'vue'
 import { __PASCAL__Schema } from '~~/nsdb/schemas/__TABLE__'
 import { useNsdbSchema } from '@lucashw68/nsdb/useNsdbSchemas'
@@ -20,7 +20,7 @@ export function __HOOK__(opts: { store?: boolean } = {}) {
 		bindModel,
 	} = useNsdbSchema(__PASCAL__Schema);
 
-	const { all, find } = bindModel<__ROW__>(model)
+	const { fetch, find } = bindModel<__ROW__>(model)
 
 	return {
 		items: model.items,
@@ -28,12 +28,12 @@ export function __HOOK__(opts: { store?: boolean } = {}) {
 		fields,
 		editableKeys,
 		new: () => emptyFromSchema(),
-		all,
+		fetch,
 		find,
-		get: model.getById,
+		getById: model.getById,
 		create: model.create,
-		edit: model.update,
-		delete: model.remove,
+		update: model.update,
+		remove: model.remove,
 		sync: model.sync,
 	}
 }

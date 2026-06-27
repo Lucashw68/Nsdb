@@ -1,44 +1,32 @@
 import { useSupabaseClient } from '#imports'
-
-export type OrderDirection = 'asc' | 'desc'
-
-export interface ListOptions {
-	select?: string
-	orderBy?: string
-	orderDirection?: OrderDirection
-
-	/**
-	 * Tri relationnel : ex orderBy='title', orderForeignTable='book'
-	 * => order=book(title).asc (embedded order)
-	 */
-	orderForeignTable?: string
-
-	limit?: number
-	offset?: number
-
-	/**
-	 * Recherche texte simple (ilike) via OR sur plusieurs colonnes.
-	 * Exemple:
-	 *   search: 'clover'
-	 *   searchColumns: ['title', 'author', 'book.title']
-	 */
-	search?: string
-	searchColumns?: string[]
-}
-
-export interface WhereOperator {
-	op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'ilike' | 'in'
-	value: any
-}
-
-export type WhereValue = any | WhereOperator | WhereOperator[]
-export type WhereClause = Record<string, WhereValue>
-
-export interface FindOptions extends ListOptions {
-	where?: WhereClause
-}
+import type {
+	ListOptions,
+	OrderDirection,
+	FindOptions,
+	WhereClause,
+	WhereOperator
+} from '@lucashw68/nsdb/types/list'
 
 type SupabaseFrom = ReturnType<ReturnType<typeof useSupabaseClient>['from']>
+type QueryBuilder = any
+type MutationPayload = Record<string, unknown> | Record<string, unknown>[]
+
+export interface SupabaseApiSuccess<T> {
+	success: true
+	error: undefined
+	data: T | null
+	count: number | null
+}
+
+export interface SupabaseApiFailure<T> {
+	success: false
+	error: unknown
+	data: T
+	count: number | null
+}
+
+export type SupabaseApiResponse<T> = SupabaseApiSuccess<T> | SupabaseApiFailure<T>
+export type SupabaseApiListResponse<T> = SupabaseApiResponse<T[]>
 
 function escapeOrValueForPostgrestIlike(v: string) {
 	// PostgREST "or" syntax likes: col.ilike.%term%
@@ -46,7 +34,7 @@ function escapeOrValueForPostgrestIlike(v: string) {
 	return v.replace(/[(),]/g, ' ').trim()
 }
 
-function applySearch(query: any, options: ListOptions) {
+function applySearch(query: QueryBuilder, options: ListOptions) {
 	const search = options.search?.trim()
 	if (!search) return query
 
@@ -73,12 +61,14 @@ function applyListOptions(query: SupabaseFrom, options: ListOptions) {
 		offset = 0,
 	} = options
 
-	let finalQuery: any = query
+	let finalQuery: QueryBuilder = query
 
 	// ✅ Embedded order si relation
 	if (orderForeignTable) {
-		const embeddedKey = `${orderForeignTable}(${orderBy})`
-		finalQuery = finalQuery.order(embeddedKey, { ascending: orderDirection === 'asc' })
+		finalQuery = finalQuery.order(orderBy, {
+			ascending: orderDirection === 'asc',
+			referencedTable: orderForeignTable,
+		})
 	} else {
 		finalQuery = finalQuery.order(orderBy, { ascending: orderDirection === 'asc' })
 	}
@@ -87,7 +77,7 @@ function applyListOptions(query: SupabaseFrom, options: ListOptions) {
 	return finalQuery
 }
 
-function applySingleFilter(query: any, column: string, filter: WhereOperator) {
+function applySingleFilter(query: QueryBuilder, column: string, filter: WhereOperator) {
 	switch (filter.op) {
 		case 'eq': return query.eq(column, filter.value)
 		case 'neq': return query.neq(column, filter.value)
@@ -104,7 +94,7 @@ function applySingleFilter(query: any, column: string, filter: WhereOperator) {
 function applyWhereFilters(query: SupabaseFrom, where?: WhereClause) {
 	if (!where || Object.keys(where).length === 0) return query
 
-	let finalQuery: any = query
+	let finalQuery: QueryBuilder = query
 
 	for (const [column, rawValue] of Object.entries(where)) {
 		if (Array.isArray(rawValue)) {
@@ -129,7 +119,15 @@ function applyWhereFilters(query: SupabaseFrom, where?: WhereClause) {
 	return finalQuery
 }
 
-function handleResponse<T>(payload: { data: T | null; error: any; count?: number | null }, context: string) {
+/** #########################################################
+ * Handle Responses
+ * ##########################################################
+*/
+
+function handleResponse<T>(
+	payload: { data: T | null; error: unknown; count?: number | null },
+	context: string
+): SupabaseApiResponse<T> {
 	const { data, error, count } = payload
 
 	if (error) {
@@ -153,9 +151,9 @@ function handleResponse<T>(payload: { data: T | null; error: any; count?: number
 function handleListResponse<T>(
 	data: T[] | null,
 	count: number | null,
-	error: any,
+	error: unknown,
 	context: string
-	) {
+) {
 	if (error) {
 		console.error(`❌ [${context}]`, error)
 		return {
@@ -174,6 +172,14 @@ function handleListResponse<T>(
 	}
 }
 
+/** #########################################################
+ * API Methods
+ * all, show, create, update, destroy, upsert
+ * allByProperty, showByProperty, updateByProperty, deleteByProperty
+ * count
+ * find, findOne
+ * ##########################################################
+*/
 
 export const useSupabaseApi = () => {
 	const supabaseClient = useSupabaseClient?.()
@@ -199,6 +205,7 @@ export const useSupabaseApi = () => {
 			selectClause = selectOrOptions.select ?? '*'
 			options = {
 				select: selectClause,
+				where: selectOrOptions.where,
 				orderBy: selectOrOptions.orderBy ?? orderBy,
 				orderDirection: selectOrOptions.orderDirection ?? orderDirection,
 				orderForeignTable: selectOrOptions.orderForeignTable,
@@ -210,6 +217,7 @@ export const useSupabaseApi = () => {
 		}
 
 		let q: any = supabaseClient.from(resource).select(selectClause, { count: 'exact' })
+		q = applyWhereFilters(q, options.where)
 		q = applySearch(q, options)
 		q = applyListOptions(q, options)
 
@@ -228,13 +236,13 @@ export const useSupabaseApi = () => {
 		return handleResponse<T>({ data, error }, `SHOW ${resource}/${id}`)
 	}
 
-	async function create<T = any>(resource: string, payload: any) {
-		const { data, error } = await supabaseClient.from(resource).insert(payload).select().single()
+	async function create<T = any>(resource: string, payload: MutationPayload) {
+		const { data, error } = await (supabaseClient.from(resource) as QueryBuilder).insert(payload).select().single()
 		return handleResponse<T>({ data, error }, `CREATE ${resource}`)
 	}
 
-	async function update<T = any>(resource: string, id: string | number, payload: any) {
-		const { data, error } = await supabaseClient.from(resource).update(payload).eq('id', id).select()
+	async function update<T = any>(resource: string, id: string | number, payload: MutationPayload) {
+		const { data, error } = await (supabaseClient.from(resource) as QueryBuilder).update(payload).eq('id', id).select()
 		return handleResponse<T | T[]>({ data, error }, `UPDATE ${resource}/${id}`)
 	}
 
@@ -243,8 +251,8 @@ export const useSupabaseApi = () => {
 		return handleResponse({ data, error }, `DELETE ${resource}/${id}`)
 	}
 
-	async function upsert<T = any>(resource: string, payload: any, options: { onConflict?: string } = {}) {
-		let q: any = supabaseClient.from(resource).upsert(payload).select()
+	async function upsert<T = any>(resource: string, payload: MutationPayload, options: { onConflict?: string } = {}) {
+		let q: QueryBuilder = (supabaseClient.from(resource) as QueryBuilder).upsert(payload).select()
 		if (options.onConflict) q = q.onConflict(options.onConflict)
 		const { data, error } = await q
 		return handleResponse<T | T[]>({ data, error }, `UPSERT ${resource}`)
@@ -270,6 +278,7 @@ export const useSupabaseApi = () => {
 			selectClause = selectOrOptions.select ?? '*'
 			options = {
 				select: selectClause,
+				where: selectOrOptions.where,
 				orderBy: selectOrOptions.orderBy ?? orderBy,
 				orderDirection: selectOrOptions.orderDirection ?? orderDirection,
 				orderForeignTable: selectOrOptions.orderForeignTable,
@@ -280,11 +289,12 @@ export const useSupabaseApi = () => {
 			}
 		}
 
-		let q: any = supabaseClient
+		let q: QueryBuilder = supabaseClient
 			.from(resource)
 			.select(selectClause, { count: 'exact' })
 			.eq(propertyName, propertyValue)
 
+		q = applyWhereFilters(q, options.where)
 		q = applySearch(q, options)
 		q = applyListOptions(q, options)
 
@@ -308,8 +318,8 @@ export const useSupabaseApi = () => {
 		return handleResponse<T>({ data, error }, `SHOW ${resource} WHERE ${propertyName}=${propertyValue}`)
 	}
 
-	async function updateByProperty<T = any>(resource: string, propertyName: string, propertyValue: string | number, payload: any) {
-		const { data, error } = await supabaseClient.from(resource).update(payload).eq(propertyName, propertyValue).select()
+	async function updateByProperty<T = any>(resource: string, propertyName: string, propertyValue: string | number, payload: MutationPayload) {
+		const { data, error } = await (supabaseClient.from(resource) as QueryBuilder).update(payload).eq(propertyName, propertyValue).select()
 		return handleResponse<T | T[]>({ data, error }, `UPDATE ${resource} WHERE ${propertyName}=${propertyValue}`)
 	}
 
@@ -319,7 +329,7 @@ export const useSupabaseApi = () => {
 	}
 
 	async function count(resource: string, where?: { property: string; value: string | number }) {
-		let q: any = supabaseClient.from(resource).select('*', { count: 'exact', head: true })
+		let q: QueryBuilder = supabaseClient.from(resource).select('*', { count: 'exact', head: true })
 		if (where) q = q.eq(where.property, where.value)
 		const { count, error } = await q
 		return handleResponse<number | null>({ data: count ?? null, error }, `COUNT ${resource}`)
@@ -338,7 +348,7 @@ export const useSupabaseApi = () => {
 			searchColumns,
 		} = options
 
-		let q: any = supabaseClient.from(resource).select(select, { count: 'exact' })
+		let q: QueryBuilder = supabaseClient.from(resource).select(select, { count: 'exact' })
 		q = applyWhereFilters(q, where)
 		q = applySearch(q, { search, searchColumns })
 		q = applyListOptions(q, { orderBy, orderDirection, orderForeignTable, limit, offset })
@@ -349,7 +359,7 @@ export const useSupabaseApi = () => {
 
 	async function findOne<T = any>(resource: string, options: FindOptions) {
 		const { select = '*', where } = options
-		let q: any = supabaseClient.from(resource).select(select)
+		let q: QueryBuilder = supabaseClient.from(resource).select(select)
 		q = applyWhereFilters(q, where)
 		const { data, error } = await q.limit(1).single()
 		return handleResponse<T>({ data, error }, `FIND ONE ${resource}`)
