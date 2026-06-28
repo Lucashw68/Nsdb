@@ -4,6 +4,8 @@ export default {
 	supabase: {
 		schema: 'public',
 		projectId: process.env.SUPABASE_PROJECT_ID,
+		// For self-hosted Supabase, use dbUrl instead of projectId:
+		// dbUrl: process.env.SUPABASE_DB_URL,
 		linked: false,
 	},
 	paths: {

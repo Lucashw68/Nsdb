@@ -2,6 +2,7 @@ export interface NsdbConfig {
 	supabase?: {
 		schema?: string
 		projectId?: string
+		dbUrl?: string
 		linked?: boolean
 	}
 	paths?: {

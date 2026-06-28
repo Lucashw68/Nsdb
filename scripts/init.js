@@ -30,18 +30,22 @@ function quoteString(value) {
 export function buildNsdbConfigTemplate({
 	schemaName = 'public',
 	projectIdExpression = 'process.env.SUPABASE_PROJECT_ID',
+	dbUrlExpression = '',
 	linked = false,
 	paths = DEFAULT_PATHS,
 } = {}) {
-	const projectIdLine = linked
+	const projectIdLine = linked || dbUrlExpression
 		? ''
 		: `\n\t\tprojectId: ${projectIdExpression},`
+	const dbUrlLine = dbUrlExpression
+		? `\n\t\tdbUrl: ${dbUrlExpression},`
+		: ''
 
 	return `import type { NsdbConfig } from '@lucashw68/nsdb/types/config'
 
 export default {
 \tsupabase: {
-\t\tschema: ${quoteString(schemaName)},${projectIdLine}
+\t\tschema: ${quoteString(schemaName)},${projectIdLine}${dbUrlLine}
 \t\tlinked: ${linked ? 'true' : 'false'},
 \t},
 \tpaths: {
@@ -80,6 +84,7 @@ function buildEnvExample() {
 	return `SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-anon-key
 SUPABASE_PROJECT_ID=your-project-id
+SUPABASE_DB_URL=postgresql://postgres:password@localhost:5432/postgres
 `
 }
 
@@ -126,13 +131,14 @@ function updatePackageJson(currentWorkingDirectory) {
 	return true
 }
 
-function printNextSteps({ linked }) {
+function printNextSteps({ linked, usesDbUrl }) {
 	console.log('')
 	console.log('Next steps:')
 	console.log('1. Add @lucashw68/nsdb to modules in nuxt.config.ts.')
 	console.log('2. Configure @nuxtjs/supabase with SUPABASE_URL and SUPABASE_KEY.')
-	if (!linked) console.log('3. Set SUPABASE_PROJECT_ID in .env.')
-	console.log(`${linked ? '3' : '4'}. Run: npm run nsdb:all`)
+	if (!linked && !usesDbUrl) console.log('3. Set SUPABASE_PROJECT_ID in .env.')
+	if (usesDbUrl) console.log('3. Set SUPABASE_DB_URL in .env.')
+	console.log(`${linked && !usesDbUrl ? '3' : '4'}. Run: npm run nsdb:all`)
 }
 
 export async function initNsdb({
@@ -143,7 +149,9 @@ export async function initNsdb({
 	const linked = parsedArguments.getBool('linked', false)
 	const schemaName = parsedArguments.get('schema', 'public')
 	const projectId = parsedArguments.get('project-id', '')
+	const dbUrl = parsedArguments.get('db-url', '')
 	const projectIdExpression = projectId ? quoteString(projectId) : 'process.env.SUPABASE_PROJECT_ID'
+	const dbUrlExpression = dbUrl ? quoteString(dbUrl) : parsedArguments.getBool('self-hosted', false) ? 'process.env.SUPABASE_DB_URL' : ''
 	const configFileName = parsedArguments.get('config', 'nsdb.config.ts')
 	const configFilePath = path.resolve(currentWorkingDirectory, configFileName)
 	const envExampleFilePath = path.resolve(currentWorkingDirectory, '.env.example')
@@ -155,6 +163,7 @@ export async function initNsdb({
 		buildNsdbConfigTemplate({
 			schemaName,
 			projectIdExpression,
+			dbUrlExpression,
 			linked,
 			paths: DEFAULT_PATHS,
 		}),
@@ -168,7 +177,7 @@ export async function initNsdb({
 
 	ensureConfiguredDirectories(currentWorkingDirectory, DEFAULT_PATHS)
 	updatePackageJson(currentWorkingDirectory)
-	printNextSteps({ linked })
+	printNextSteps({ linked, usesDbUrl: Boolean(dbUrlExpression) })
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

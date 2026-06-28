@@ -6,6 +6,7 @@ export const defaultNsdbConfig = {
 	supabase: {
 		schema: 'public',
 		projectId: '',
+		dbUrl: '',
 		linked: false,
 	},
 	paths: {

@@ -103,6 +103,8 @@ Créez ou complétez `.env`.
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-anon-key
 SUPABASE_PROJECT_ID=your-project-id
+# Self-hosted uniquement, pour générer les types sans project id :
+SUPABASE_DB_URL=postgresql://postgres:password@localhost:5432/postgres
 ```
 
 `SUPABASE_URL` et `SUPABASE_KEY` sont utilisés par `@nuxtjs/supabase`.
@@ -110,6 +112,8 @@ SUPABASE_PROJECT_ID=your-project-id
 `SUPABASE_PROJECT_ID` est utilisé par NSDB pour générer les types Supabase avec le CLI Supabase.
 
 Si votre projet Supabase est déjà lié localement avec le Supabase CLI, vous pouvez utiliser `--linked` et ne pas renseigner `SUPABASE_PROJECT_ID`.
+
+Si vous utilisez Supabase en self-hosted, vous pouvez utiliser `SUPABASE_DB_URL` à la place de `SUPABASE_PROJECT_ID`.
 
 ---
 
@@ -133,6 +137,8 @@ Options disponibles :
 nsdb init --linked
 nsdb init --schema private
 nsdb init --project-id your-project-id
+nsdb init --self-hosted
+nsdb init --db-url postgresql://postgres:password@localhost:5432/postgres
 nsdb init --force
 ```
 
@@ -144,6 +150,18 @@ npx @lucashw68/nsdb init --schema public --project-id abcdefghijkl
 
 ```bash
 npx @lucashw68/nsdb init --linked --schema public
+```
+
+Instance Supabase self-hosted :
+
+```bash
+npx @lucashw68/nsdb init --self-hosted --schema public
+```
+
+ou avec une URL Postgres explicite :
+
+```bash
+npx @lucashw68/nsdb init --db-url postgresql://postgres:password@localhost:5432/postgres
 ```
 
 `nsdb init` crée :
@@ -193,6 +211,20 @@ export default {
 	supabase: {
 		schema: 'public',
 		linked: true,
+	},
+} satisfies NsdbConfig
+```
+
+Pour une instance Supabase self-hosted sans project id :
+
+```ts
+import type { NsdbConfig } from '@lucashw68/nsdb/types/config'
+
+export default {
+	supabase: {
+		schema: 'public',
+		dbUrl: process.env.SUPABASE_DB_URL,
+		linked: false,
 	},
 } satisfies NsdbConfig
 ```

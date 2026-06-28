@@ -8,10 +8,14 @@ import { getBoolOption, getOption, loadNsdbConfig } from '../helpers/config.js'
 /**
  * Build the Supabase CLI command that dumps the database types to disk.
  */
-function buildCommand({ projectId, outputPath, schemaName, useLinkedProject }) {
+export function buildCommand({ projectId, dbUrl, outputPath, schemaName, useLinkedProject }) {
 	const parts = ['npx supabase gen types typescript']
 	if (schemaName) parts.push(`--schema ${schemaName}`)
-	parts.push(useLinkedProject ? '--linked' : `--project-id ${projectId}`)
+	if (dbUrl) {
+		parts.push(`--db-url "${dbUrl}"`)
+	} else {
+		parts.push(useLinkedProject ? '--linked' : `--project-id ${projectId}`)
+	}
 	parts.push(`> "${outputPath}"`)
 	return parts.join(' ')
 }
@@ -37,11 +41,12 @@ async function main() {
 
 	const outputFilePath = path.resolve(currentWorkingDirectory, getOption(parsedArguments, config, 'out', 'paths.types'))
 	const projectId = getOption(parsedArguments, config, 'project-id', 'supabase.projectId', process.env.SUPABASE_PROJECT_ID || '')
+	const dbUrl = getOption(parsedArguments, config, 'db-url', 'supabase.dbUrl', process.env.SUPABASE_DB_URL || '')
 	const schemaName = getOption(parsedArguments, config, 'schema', 'supabase.schema', 'public')
 	const useLinkedProject = getBoolOption(parsedArguments, config, 'linked', 'supabase.linked', false)
 
-	if (!useLinkedProject && !projectId) {
-		console.error('❌ Missing SUPABASE_PROJECT_ID (pass --project-id or --linked).')
+	if (!dbUrl && !useLinkedProject && !projectId) {
+		console.error('❌ Missing Supabase source (pass --db-url, --project-id or --linked).')
 		process.exit(1)
 	}
 
@@ -53,14 +58,16 @@ async function main() {
 	ensureDir(path.dirname(outputFilePath))
 	const commandLine = buildCommand({
 		projectId,
+		dbUrl,
 		outputPath: outputFilePath,
 		schemaName,
 		useLinkedProject
 	})
 
-	console.log(`📦 Project: ${useLinkedProject ? '(linked)' : projectId}`)
+	console.log(`📦 Project: ${dbUrl ? '(db-url)' : useLinkedProject ? '(linked)' : projectId}`)
 	console.log(`📁 Output: ${path.relative(currentWorkingDirectory, outputFilePath)}`)
 	console.log(`📚 Schema: ${schemaName}`)
+	if (dbUrl) console.log('🗄️  DB URL mode enabled')
 	if (useLinkedProject) console.log('🔗 Linked project mode enabled')
 	console.log('🔄 Generating Supabase types...')
 

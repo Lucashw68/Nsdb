@@ -25,6 +25,7 @@ test('loadNsdbConfig merges defaults with nsdb.config.ts', async () => {
 	assert.equal(result.configFilePath, path.join(projectDirectory, 'nsdb.config.ts'))
 	assert.equal(result.config.supabase.schema, 'private')
 	assert.equal(result.config.supabase.projectId, 'project_ref')
+	assert.equal(result.config.supabase.dbUrl, '')
 	assert.equal(result.config.supabase.linked, false)
 	assert.equal(result.config.paths.types, 'custom/database.types.ts')
 	assert.equal(result.config.paths.models, 'nsdb/models')

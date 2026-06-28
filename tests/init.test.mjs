@@ -21,6 +21,17 @@ test('buildNsdbConfigTemplate supports linked projects', () => {
 	assert.doesNotMatch(template, /projectId:/)
 })
 
+test('buildNsdbConfigTemplate supports self-hosted db url projects', () => {
+	const template = buildNsdbConfigTemplate({
+		schemaName: 'public',
+		dbUrlExpression: 'process.env.SUPABASE_DB_URL',
+	})
+
+	assert.match(template, /dbUrl: process.env.SUPABASE_DB_URL/)
+	assert.doesNotMatch(template, /projectId:/)
+	assert.match(template, /linked: false/)
+})
+
 test('mergePackageScripts preserves existing scripts', () => {
 	const packageJson = mergePackageScripts({
 		scripts: {
