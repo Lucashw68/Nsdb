@@ -105,6 +105,10 @@ SUPABASE_KEY=your-anon-key
 SUPABASE_PROJECT_ID=your-project-id
 # Self-hosted uniquement, pour générer les types sans project id :
 SUPABASE_DB_URL=postgresql://postgres:password@localhost:5432/postgres
+# Self-hosted avec génération sur VPS :
+SUPABASE_REMOTE_SSH_HOST=vps
+SUPABASE_REMOTE_PROJECT_PATH=/opt/supabase-projects/mysic
+SUPABASE_REMOTE_DB_URL=postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres
 ```
 
 `SUPABASE_URL` et `SUPABASE_KEY` sont utilisés par `@nuxtjs/supabase`.
@@ -114,6 +118,8 @@ SUPABASE_DB_URL=postgresql://postgres:password@localhost:5432/postgres
 Si votre projet Supabase est déjà lié localement avec le Supabase CLI, vous pouvez utiliser `--linked` et ne pas renseigner `SUPABASE_PROJECT_ID`.
 
 Si vous utilisez Supabase en self-hosted, vous pouvez utiliser `SUPABASE_DB_URL` à la place de `SUPABASE_PROJECT_ID`.
+
+Si Postgres n'est pas exposé publiquement, utilisez `SUPABASE_REMOTE_*` pour générer les types sur le VPS via SSH puis les copier localement avec `scp`.
 
 ---
 
@@ -139,6 +145,8 @@ nsdb init --schema private
 nsdb init --project-id your-project-id
 nsdb init --self-hosted
 nsdb init --db-url postgresql://postgres:password@localhost:5432/postgres
+nsdb init --remote-types
+nsdb init --remote-ssh-host vps --remote-project-path /opt/supabase-projects/mysic
 nsdb init --force
 ```
 
@@ -162,6 +170,21 @@ ou avec une URL Postgres explicite :
 
 ```bash
 npx @lucashw68/nsdb init --db-url postgresql://postgres:password@localhost:5432/postgres
+```
+
+Instance Supabase self-hosted sur VPS sans Postgres exposé :
+
+```bash
+npx @lucashw68/nsdb init --remote-types
+```
+
+ou avec les valeurs explicites :
+
+```bash
+npx @lucashw68/nsdb init \
+	--remote-ssh-host vps \
+	--remote-project-path /opt/supabase-projects/mysic \
+	--remote-db-url 'postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres'
 ```
 
 `nsdb init` crée :
@@ -227,6 +250,32 @@ export default {
 		linked: false,
 	},
 } satisfies NsdbConfig
+```
+
+Pour générer les types directement sur le VPS :
+
+```ts
+import type { NsdbConfig } from '@lucashw68/nsdb/types/config'
+
+export default {
+	supabase: {
+		schema: 'public',
+		remoteTypes: {
+			sshHost: process.env.SUPABASE_REMOTE_SSH_HOST,
+			projectPath: process.env.SUPABASE_REMOTE_PROJECT_PATH,
+			dbUrl: process.env.SUPABASE_REMOTE_DB_URL,
+			remoteOutput: '/tmp/database.types.ts',
+		},
+		linked: false,
+	},
+} satisfies NsdbConfig
+```
+
+Ce mode exécute la génération sur le VPS, puis copie le fichier généré en local :
+
+```bash
+ssh vps 'cd /opt/supabase-projects/mysic && npx supabase gen types typescript --db-url "postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres" > /tmp/database.types.ts'
+scp vps:/tmp/database.types.ts ./types/database.types.ts
 ```
 
 ---

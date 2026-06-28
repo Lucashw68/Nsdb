@@ -31,21 +31,30 @@ export function buildNsdbConfigTemplate({
 	schemaName = 'public',
 	projectIdExpression = 'process.env.SUPABASE_PROJECT_ID',
 	dbUrlExpression = '',
+	remoteTypes = null,
 	linked = false,
 	paths = DEFAULT_PATHS,
 } = {}) {
-	const projectIdLine = linked || dbUrlExpression
+	const projectIdLine = linked || dbUrlExpression || remoteTypes
 		? ''
 		: `\n\t\tprojectId: ${projectIdExpression},`
 	const dbUrlLine = dbUrlExpression
 		? `\n\t\tdbUrl: ${dbUrlExpression},`
+		: ''
+	const remoteTypesLine = remoteTypes
+		? `\n\t\tremoteTypes: {
+\t\t\tsshHost: ${remoteTypes.sshHost},
+\t\t\tprojectPath: ${remoteTypes.projectPath},
+\t\t\tdbUrl: ${remoteTypes.dbUrl},
+\t\t\tremoteOutput: ${remoteTypes.remoteOutput},
+\t\t},`
 		: ''
 
 	return `import type { NsdbConfig } from '@lucashw68/nsdb/types/config'
 
 export default {
 \tsupabase: {
-\t\tschema: ${quoteString(schemaName)},${projectIdLine}${dbUrlLine}
+\t\tschema: ${quoteString(schemaName)},${projectIdLine}${dbUrlLine}${remoteTypesLine}
 \t\tlinked: ${linked ? 'true' : 'false'},
 \t},
 \tpaths: {
@@ -85,6 +94,9 @@ function buildEnvExample() {
 SUPABASE_KEY=your-anon-key
 SUPABASE_PROJECT_ID=your-project-id
 SUPABASE_DB_URL=postgresql://postgres:password@localhost:5432/postgres
+SUPABASE_REMOTE_SSH_HOST=vps
+SUPABASE_REMOTE_PROJECT_PATH=/opt/supabase-projects/mysic
+SUPABASE_REMOTE_DB_URL=postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres
 `
 }
 
@@ -137,7 +149,7 @@ function printNextSteps({ linked, usesDbUrl }) {
 	console.log('1. Add @lucashw68/nsdb to modules in nuxt.config.ts.')
 	console.log('2. Configure @nuxtjs/supabase with SUPABASE_URL and SUPABASE_KEY.')
 	if (!linked && !usesDbUrl) console.log('3. Set SUPABASE_PROJECT_ID in .env.')
-	if (usesDbUrl) console.log('3. Set SUPABASE_DB_URL in .env.')
+	if (usesDbUrl) console.log('3. Set SUPABASE_DB_URL or SUPABASE_REMOTE_* variables in .env.')
 	console.log(`${linked && !usesDbUrl ? '3' : '4'}. Run: npm run nsdb:all`)
 }
 
@@ -150,8 +162,21 @@ export async function initNsdb({
 	const schemaName = parsedArguments.get('schema', 'public')
 	const projectId = parsedArguments.get('project-id', '')
 	const dbUrl = parsedArguments.get('db-url', '')
+	const remoteSshHost = parsedArguments.get('remote-ssh-host', '')
+	const remoteProjectPath = parsedArguments.get('remote-project-path', '')
+	const remoteDbUrl = parsedArguments.get('remote-db-url', '')
+	const remoteOutput = parsedArguments.get('remote-output', '/tmp/database.types.ts')
 	const projectIdExpression = projectId ? quoteString(projectId) : 'process.env.SUPABASE_PROJECT_ID'
 	const dbUrlExpression = dbUrl ? quoteString(dbUrl) : parsedArguments.getBool('self-hosted', false) ? 'process.env.SUPABASE_DB_URL' : ''
+	const useRemoteTypes = Boolean(remoteSshHost) || parsedArguments.getBool('remote-types', false)
+	const remoteTypes = useRemoteTypes
+		? {
+			sshHost: remoteSshHost ? quoteString(remoteSshHost) : 'process.env.SUPABASE_REMOTE_SSH_HOST',
+			projectPath: remoteProjectPath ? quoteString(remoteProjectPath) : 'process.env.SUPABASE_REMOTE_PROJECT_PATH',
+			dbUrl: remoteDbUrl ? quoteString(remoteDbUrl) : 'process.env.SUPABASE_REMOTE_DB_URL',
+			remoteOutput: quoteString(remoteOutput),
+		}
+		: null
 	const configFileName = parsedArguments.get('config', 'nsdb.config.ts')
 	const configFilePath = path.resolve(currentWorkingDirectory, configFileName)
 	const envExampleFilePath = path.resolve(currentWorkingDirectory, '.env.example')
@@ -164,6 +189,7 @@ export async function initNsdb({
 			schemaName,
 			projectIdExpression,
 			dbUrlExpression,
+			remoteTypes,
 			linked,
 			paths: DEFAULT_PATHS,
 		}),
@@ -177,7 +203,7 @@ export async function initNsdb({
 
 	ensureConfiguredDirectories(currentWorkingDirectory, DEFAULT_PATHS)
 	updatePackageJson(currentWorkingDirectory)
-	printNextSteps({ linked, usesDbUrl: Boolean(dbUrlExpression) })
+	printNextSteps({ linked, usesDbUrl: Boolean(dbUrlExpression || remoteTypes) })
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

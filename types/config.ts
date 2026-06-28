@@ -4,6 +4,12 @@ export interface NsdbConfig {
 		projectId?: string
 		dbUrl?: string
 		linked?: boolean
+		remoteTypes?: {
+			sshHost?: string
+			projectPath?: string
+			dbUrl?: string
+			remoteOutput?: string
+		}
 	}
 	paths?: {
 		types?: string

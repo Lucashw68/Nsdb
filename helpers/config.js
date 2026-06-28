@@ -8,6 +8,12 @@ export const defaultNsdbConfig = {
 		projectId: '',
 		dbUrl: '',
 		linked: false,
+		remoteTypes: {
+			sshHost: '',
+			projectPath: '',
+			dbUrl: '',
+			remoteOutput: '/tmp/database.types.ts',
+		},
 	},
 	paths: {
 		types: 'types/database.types.ts',

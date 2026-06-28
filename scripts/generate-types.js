@@ -8,16 +8,61 @@ import { getBoolOption, getOption, loadNsdbConfig } from '../helpers/config.js'
 /**
  * Build the Supabase CLI command that dumps the database types to disk.
  */
-export function buildCommand({ projectId, dbUrl, outputPath, schemaName, useLinkedProject }) {
+function quoteShellArgument(value) {
+	return `'${String(value).replaceAll("'", "'\\''")}'`
+}
+
+function quoteRemoteShellArgument(value) {
+	return `"${String(value)
+		.replaceAll('\\', '\\\\')
+		.replaceAll('"', '\\"')
+		.replaceAll('`', '\\`')}"`
+}
+
+export function buildCommand({
+	projectId,
+	dbUrl,
+	outputPath,
+	schemaName,
+	useLinkedProject,
+	argumentQuoter = quoteShellArgument,
+}) {
 	const parts = ['npx supabase gen types typescript']
 	if (schemaName) parts.push(`--schema ${schemaName}`)
 	if (dbUrl) {
-		parts.push(`--db-url "${dbUrl}"`)
+		parts.push(`--db-url ${argumentQuoter(dbUrl)}`)
 	} else {
 		parts.push(useLinkedProject ? '--linked' : `--project-id ${projectId}`)
 	}
-	parts.push(`> "${outputPath}"`)
+	parts.push(`> ${argumentQuoter(outputPath)}`)
 	return parts.join(' ')
+}
+
+export function buildRemoteTypesCommands({
+	sshHost,
+	projectPath,
+	dbUrl,
+	remoteOutput = '/tmp/database.types.ts',
+	localOutputPath,
+	schemaName = 'public',
+}) {
+	const remoteGenerateCommand = [
+		projectPath ? `cd ${quoteShellArgument(projectPath)}` : '',
+		buildCommand({
+			dbUrl,
+			outputPath: remoteOutput,
+			schemaName,
+			useLinkedProject: false,
+			argumentQuoter: quoteRemoteShellArgument,
+		}),
+	]
+		.filter(Boolean)
+		.join(' && ')
+
+	return {
+		generateCommand: `ssh ${quoteShellArgument(sshHost)} ${quoteShellArgument(remoteGenerateCommand)}`,
+		copyCommand: `scp ${quoteShellArgument(`${sshHost}:${remoteOutput}`)} ${quoteShellArgument(localOutputPath)}`,
+	}
 }
 
 async function loadDotenvIfAvailable(dotenvFilePath) {
@@ -44,18 +89,56 @@ async function main() {
 	const dbUrl = getOption(parsedArguments, config, 'db-url', 'supabase.dbUrl', process.env.SUPABASE_DB_URL || '')
 	const schemaName = getOption(parsedArguments, config, 'schema', 'supabase.schema', 'public')
 	const useLinkedProject = getBoolOption(parsedArguments, config, 'linked', 'supabase.linked', false)
+	const remoteSshHost = getOption(parsedArguments, config, 'remote-ssh-host', 'supabase.remoteTypes.sshHost', process.env.SUPABASE_REMOTE_SSH_HOST || '')
+	const remoteProjectPath = getOption(parsedArguments, config, 'remote-project-path', 'supabase.remoteTypes.projectPath', process.env.SUPABASE_REMOTE_PROJECT_PATH || '')
+	const remoteDbUrl = getOption(parsedArguments, config, 'remote-db-url', 'supabase.remoteTypes.dbUrl', process.env.SUPABASE_REMOTE_DB_URL || '')
+	const remoteOutputPath = getOption(parsedArguments, config, 'remote-output', 'supabase.remoteTypes.remoteOutput', '/tmp/database.types.ts')
+	const useRemoteTypes = Boolean(remoteSshHost)
 
-	if (!dbUrl && !useLinkedProject && !projectId) {
-		console.error('❌ Missing Supabase source (pass --db-url, --project-id or --linked).')
+	if (useRemoteTypes && !remoteDbUrl) {
+		console.error('❌ Missing remote DB URL (pass --remote-db-url or set supabase.remoteTypes.dbUrl).')
 		process.exit(1)
 	}
 
-	if (!isAvailable('npx supabase --version')) {
+	if (!useRemoteTypes && !dbUrl && !useLinkedProject && !projectId) {
+		console.error('❌ Missing Supabase source (pass --remote-ssh-host, --db-url, --project-id or --linked).')
+		process.exit(1)
+	}
+
+	if (!useRemoteTypes && !isAvailable('npx supabase --version')) {
 		console.error('❌ Supabase CLI not available. Install it with: npm i -D supabase')
 		process.exit(1)
 	}
 
 	ensureDir(path.dirname(outputFilePath))
+	if (useRemoteTypes) {
+		const { generateCommand, copyCommand } = buildRemoteTypesCommands({
+			sshHost: remoteSshHost,
+			projectPath: remoteProjectPath,
+			dbUrl: remoteDbUrl,
+			remoteOutput: remoteOutputPath,
+			localOutputPath: outputFilePath,
+			schemaName,
+		})
+
+		console.log(`📦 Project: ${remoteSshHost} (remote ssh)`)
+		console.log(`📁 Output: ${path.relative(currentWorkingDirectory, outputFilePath)}`)
+		console.log(`📚 Schema: ${schemaName}`)
+		console.log(`🗄️  Remote output: ${remoteOutputPath}`)
+		console.log('🔄 Generating Supabase types remotely...')
+
+		try {
+			run(generateCommand, { inherit: true })
+			run(copyCommand, { inherit: true })
+			console.log('✅ Types generated and copied successfully.')
+		} catch (error) {
+			console.error('❌ Failed to generate Supabase types remotely.')
+			process.exit(1)
+		}
+
+		return
+	}
+
 	const commandLine = buildCommand({
 		projectId,
 		dbUrl,

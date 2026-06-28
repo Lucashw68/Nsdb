@@ -109,11 +109,15 @@ SUPABASE_KEY=your-anon-key
 SUPABASE_PROJECT_ID=your-project-id
 # Self-hosted uniquement, pour générer les types sans project id :
 SUPABASE_DB_URL=postgresql://postgres:password@localhost:5432/postgres
+SUPABASE_REMOTE_SSH_HOST=vps
+SUPABASE_REMOTE_PROJECT_PATH=/opt/supabase-projects/mysic
+SUPABASE_REMOTE_DB_URL=postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres
 ```
 
 `SUPABASE_URL` et `SUPABASE_KEY` sont lus par `@nuxtjs/supabase`.
 `SUPABASE_PROJECT_ID` est utilisé par NSDB pour générer les types via le CLI Supabase.
 `SUPABASE_DB_URL` peut remplacer `SUPABASE_PROJECT_ID` pour une instance Supabase self-hosted.
+`SUPABASE_REMOTE_*` permet de générer les types directement sur un VPS quand Postgres n'est pas exposé publiquement.
 
 ---
 
@@ -135,6 +139,8 @@ nsdb init --schema private
 nsdb init --project-id your-project-id
 nsdb init --self-hosted
 nsdb init --db-url postgresql://postgres:password@localhost:5432/postgres
+nsdb init --remote-types
+nsdb init --remote-ssh-host vps --remote-project-path /opt/supabase-projects/mysic
 nsdb init --force
 ```
 
@@ -195,6 +201,32 @@ export default {
 		linked: false,
 	},
 } satisfies NsdbConfig
+```
+
+Si Postgres n'est accessible que depuis le VPS, utilisez la génération remote SSH :
+
+```ts
+import type { NsdbConfig } from '@lucashw68/nsdb/types/config'
+
+export default {
+	supabase: {
+		schema: 'public',
+		remoteTypes: {
+			sshHost: process.env.SUPABASE_REMOTE_SSH_HOST,
+			projectPath: process.env.SUPABASE_REMOTE_PROJECT_PATH,
+			dbUrl: process.env.SUPABASE_REMOTE_DB_URL,
+			remoteOutput: '/tmp/database.types.ts',
+		},
+		linked: false,
+	},
+} satisfies NsdbConfig
+```
+
+La génération exécutera l'équivalent de :
+
+```bash
+ssh vps 'cd /opt/supabase-projects/mysic && npx supabase gen types typescript --db-url "postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres" > /tmp/database.types.ts'
+scp vps:/tmp/database.types.ts ./types/database.types.ts
 ```
 
 ---

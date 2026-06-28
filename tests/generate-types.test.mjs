@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCommand } from '../scripts/generate-types.js'
+import { buildCommand, buildRemoteTypesCommands } from '../scripts/generate-types.js'
 
 test('buildCommand supports project id mode', () => {
 	const command = buildCommand({
@@ -12,7 +12,7 @@ test('buildCommand supports project id mode', () => {
 
 	assert.equal(
 		command,
-		'npx supabase gen types typescript --schema public --project-id project_ref > "types/database.types.ts"'
+		"npx supabase gen types typescript --schema public --project-id project_ref > 'types/database.types.ts'"
 	)
 })
 
@@ -25,7 +25,7 @@ test('buildCommand supports linked mode', () => {
 
 	assert.equal(
 		command,
-		'npx supabase gen types typescript --schema public --linked > "types/database.types.ts"'
+		"npx supabase gen types typescript --schema public --linked > 'types/database.types.ts'"
 	)
 })
 
@@ -40,6 +40,26 @@ test('buildCommand supports db url mode for self-hosted Supabase', () => {
 
 	assert.equal(
 		command,
-		'npx supabase gen types typescript --schema public --db-url "postgresql://postgres:password@localhost:5432/postgres" > "types/database.types.ts"'
+		"npx supabase gen types typescript --schema public --db-url 'postgresql://postgres:password@localhost:5432/postgres' > 'types/database.types.ts'"
+	)
+})
+
+test('buildRemoteTypesCommands builds ssh and scp commands', () => {
+	const commands = buildRemoteTypesCommands({
+		sshHost: 'vps',
+		projectPath: '/opt/supabase-projects/mysic',
+		dbUrl: 'postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres',
+		remoteOutput: '/tmp/database.types.ts',
+		localOutputPath: 'src/types/database.types.ts',
+		schemaName: 'public',
+	})
+
+	assert.equal(
+		commands.generateCommand,
+		'ssh \'vps\' \'cd \'\\\'\'/opt/supabase-projects/mysic\'\\\'\' && npx supabase gen types typescript --schema public --db-url "postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres" > "/tmp/database.types.ts"\''
+	)
+	assert.equal(
+		commands.copyCommand,
+		"scp 'vps:/tmp/database.types.ts' 'src/types/database.types.ts'"
 	)
 })

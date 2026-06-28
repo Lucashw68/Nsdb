@@ -32,6 +32,24 @@ test('buildNsdbConfigTemplate supports self-hosted db url projects', () => {
 	assert.match(template, /linked: false/)
 })
 
+test('buildNsdbConfigTemplate supports remote ssh type generation', () => {
+	const template = buildNsdbConfigTemplate({
+		schemaName: 'public',
+		remoteTypes: {
+			sshHost: "'vps'",
+			projectPath: "'/opt/supabase-projects/mysic'",
+			dbUrl: "'postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres'",
+			remoteOutput: "'/tmp/database.types.ts'",
+		},
+	})
+
+	assert.match(template, /remoteTypes:/)
+	assert.match(template, /sshHost: 'vps'/)
+	assert.match(template, /projectPath: '\/opt\/supabase-projects\/mysic'/)
+	assert.match(template, /dbUrl: 'postgresql:\/\/postgres:\$POSTGRES_PASSWORD@db:5432\/postgres'/)
+	assert.doesNotMatch(template, /projectId:/)
+})
+
 test('mergePackageScripts preserves existing scripts', () => {
 	const packageJson = mergePackageScripts({
 		scripts: {
