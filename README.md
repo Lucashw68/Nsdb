@@ -527,42 +527,139 @@ Le modèle recommandé :
 - les triggers/defaults remplissent `profile_id` ou `user_id`
 - les RLS vérifient que l'utilisateur a le droit d'agir
 
-Exemple de policy :
+### Templates RLS pour une table utilisateur
 
 ```sql
+-- Exemple attendu :
+-- profiles.id est égal à auth.users.id
+-- playlists.profile_id référence profiles.id
+
+alter table profiles enable row level security;
+alter table playlists enable row level security;
+
+create policy "Users can read own profile"
+on profiles
+for select
+to authenticated
+using (id = auth.uid());
+
+create policy "Users can update own profile"
+on profiles
+for update
+to authenticated
+using (id = auth.uid())
+with check (id = auth.uid());
+
 create policy "Users can read own playlists"
 on playlists
 for select
+to authenticated
 using (
 	profile_id in (
 		select id from profiles
-		where user_id = auth.uid()
+		where id = auth.uid()
+	)
+);
+
+create policy "Users can create own playlists"
+on playlists
+for insert
+to authenticated
+with check (
+	profile_id in (
+		select id from profiles
+		where id = auth.uid()
+	)
+);
+
+create policy "Users can update own playlists"
+on playlists
+for update
+to authenticated
+using (
+	profile_id in (
+		select id from profiles
+		where id = auth.uid()
+	)
+)
+with check (
+	profile_id in (
+		select id from profiles
+		where id = auth.uid()
+	)
+);
+
+create policy "Users can delete own playlists"
+on playlists
+for delete
+to authenticated
+using (
+	profile_id in (
+		select id from profiles
+		where id = auth.uid()
 	)
 );
 ```
 
-Exemple de trigger pour éviter d'envoyer `profile_id` depuis le client :
+Variante si une table métier référence directement `auth.users.id` avec une colonne `user_id` :
 
 ```sql
-create or replace function set_profile_id()
+alter table playlists enable row level security;
+
+create policy "Users can read own playlists"
+on playlists
+for select
+to authenticated
+using (user_id = auth.uid());
+
+create policy "Users can create own playlists"
+on playlists
+for insert
+to authenticated
+with check (user_id = auth.uid());
+
+create policy "Users can update own playlists"
+on playlists
+for update
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+create policy "Users can delete own playlists"
+on playlists
+for delete
+to authenticated
+using (user_id = auth.uid());
+```
+
+Trigger générique pour éviter d'envoyer `profile_id` depuis le client :
+
+```sql
+create or replace function public.set_profile_id()
 returns trigger as $$
 begin
 	if new.profile_id is null then
-		select id into new.profile_id
-		from profiles
-		where user_id = auth.uid()
-		limit 1;
+		new.profile_id := (select auth.uid());
 	end if;
 
 	return new;
 end;
-$$ language plpgsql security definer;
+$$
+language plpgsql
+security definer
+set search_path = '';
 
-create trigger set_playlist_profile_id
-before insert on playlists
+-- PLAYLISTS
+drop trigger if exists set_profile_id on public.playlists;
+
+create trigger set_profile_id
+before insert on public.playlists
 for each row
-execute function set_profile_id();
+execute function public.set_profile_id();
 ```
+
+La même fonction peut être réutilisée sur chaque table qui possède une colonne `profile_id`.
+Il suffit d'ajouter un trigger par table.
 
 Côté Nuxt :
 
@@ -593,11 +690,11 @@ Configuration possible :
 ```ts
 const profileState = useNsdbProfile({
 	table: 'profiles',
-	userColumn: 'user_id',
+	userColumn: 'id',
 	idColumn: 'id',
 	createIfMissing: true,
 	defaults: user => ({
-		user_id: user.id,
+		id: user.id,
 		email: user.email,
 	}),
 })
