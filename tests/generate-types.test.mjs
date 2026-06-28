@@ -76,6 +76,6 @@ test('buildRemoteTypesCommands supports remote setup and custom supabase command
 		supabaseCommand: './node_modules/.bin/supabase',
 	})
 
-	assert.match(commands.generateCommand, /source ~\/\.nvm\/nvm\.sh && cd/)
+	assert.match(commands.generateCommand, /cd .* && source ~\/\.nvm\/nvm\.sh &&/)
 	assert.match(commands.generateCommand, /\.\/node_modules\/\.bin\/supabase gen types typescript/)
 })

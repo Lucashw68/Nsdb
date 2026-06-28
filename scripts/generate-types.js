@@ -50,8 +50,8 @@ export function buildRemoteTypesCommands({
 	supabaseCommand = 'npx supabase',
 }) {
 	const remoteGenerateCommand = [
-		beforeCommand,
 		projectPath ? `cd ${quoteShellArgument(projectPath)}` : '',
+		beforeCommand,
 		buildCommand({
 			dbUrl,
 			outputPath: remoteOutput,
