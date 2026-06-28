@@ -9,6 +9,8 @@ export interface NsdbConfig {
 			projectPath?: string
 			dbUrl?: string
 			remoteOutput?: string
+			beforeCommand?: string
+			supabaseCommand?: string
 		}
 	}
 	paths?: {

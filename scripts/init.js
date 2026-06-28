@@ -47,6 +47,8 @@ export function buildNsdbConfigTemplate({
 \t\t\tprojectPath: ${remoteTypes.projectPath},
 \t\t\tdbUrl: ${remoteTypes.dbUrl},
 \t\t\tremoteOutput: ${remoteTypes.remoteOutput},
+\t\t\tbeforeCommand: ${remoteTypes.beforeCommand},
+\t\t\tsupabaseCommand: ${remoteTypes.supabaseCommand},
 \t\t},`
 		: ''
 
@@ -97,6 +99,8 @@ SUPABASE_DB_URL=postgresql://postgres:password@localhost:5432/postgres
 SUPABASE_REMOTE_SSH_HOST=vps
 SUPABASE_REMOTE_PROJECT_PATH=/opt/supabase-projects/mysic
 SUPABASE_REMOTE_DB_URL=postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres
+SUPABASE_REMOTE_BEFORE_COMMAND=source ~/.nvm/nvm.sh
+SUPABASE_REMOTE_SUPABASE_COMMAND=npx supabase
 `
 }
 
@@ -166,6 +170,8 @@ export async function initNsdb({
 	const remoteProjectPath = parsedArguments.get('remote-project-path', '')
 	const remoteDbUrl = parsedArguments.get('remote-db-url', '')
 	const remoteOutput = parsedArguments.get('remote-output', '/tmp/database.types.ts')
+	const remoteBeforeCommand = parsedArguments.get('remote-before-command', '')
+	const remoteSupabaseCommand = parsedArguments.get('remote-supabase-command', '')
 	const projectIdExpression = projectId ? quoteString(projectId) : 'process.env.SUPABASE_PROJECT_ID'
 	const dbUrlExpression = dbUrl ? quoteString(dbUrl) : parsedArguments.getBool('self-hosted', false) ? 'process.env.SUPABASE_DB_URL' : ''
 	const useRemoteTypes = Boolean(remoteSshHost) || parsedArguments.getBool('remote-types', false)
@@ -175,6 +181,8 @@ export async function initNsdb({
 			projectPath: remoteProjectPath ? quoteString(remoteProjectPath) : 'process.env.SUPABASE_REMOTE_PROJECT_PATH',
 			dbUrl: remoteDbUrl ? quoteString(remoteDbUrl) : 'process.env.SUPABASE_REMOTE_DB_URL',
 			remoteOutput: quoteString(remoteOutput),
+			beforeCommand: remoteBeforeCommand ? quoteString(remoteBeforeCommand) : 'process.env.SUPABASE_REMOTE_BEFORE_COMMAND',
+			supabaseCommand: remoteSupabaseCommand ? quoteString(remoteSupabaseCommand) : 'process.env.SUPABASE_REMOTE_SUPABASE_COMMAND',
 		}
 		: null
 	const configFileName = parsedArguments.get('config', 'nsdb.config.ts')

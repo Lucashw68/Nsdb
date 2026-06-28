@@ -63,3 +63,19 @@ test('buildRemoteTypesCommands builds ssh and scp commands', () => {
 		"scp 'vps:/tmp/database.types.ts' 'src/types/database.types.ts'"
 	)
 })
+
+test('buildRemoteTypesCommands supports remote setup and custom supabase command', () => {
+	const commands = buildRemoteTypesCommands({
+		sshHost: 'vps',
+		projectPath: '/opt/supabase-projects/mysic',
+		dbUrl: 'postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres',
+		remoteOutput: '/tmp/database.types.ts',
+		localOutputPath: 'types/database.types.ts',
+		schemaName: 'public',
+		beforeCommand: 'source ~/.nvm/nvm.sh',
+		supabaseCommand: './node_modules/.bin/supabase',
+	})
+
+	assert.match(commands.generateCommand, /source ~\/\.nvm\/nvm\.sh && cd/)
+	assert.match(commands.generateCommand, /\.\/node_modules\/\.bin\/supabase gen types typescript/)
+})

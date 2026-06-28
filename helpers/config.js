@@ -13,6 +13,8 @@ export const defaultNsdbConfig = {
 			projectPath: '',
 			dbUrl: '',
 			remoteOutput: '/tmp/database.types.ts',
+			beforeCommand: '',
+			supabaseCommand: 'npx supabase',
 		},
 	},
 	paths: {

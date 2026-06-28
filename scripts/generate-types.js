@@ -25,9 +25,10 @@ export function buildCommand({
 	outputPath,
 	schemaName,
 	useLinkedProject,
+	supabaseCommand = 'npx supabase',
 	argumentQuoter = quoteShellArgument,
 }) {
-	const parts = ['npx supabase gen types typescript']
+	const parts = [`${supabaseCommand} gen types typescript`]
 	if (schemaName) parts.push(`--schema ${schemaName}`)
 	if (dbUrl) {
 		parts.push(`--db-url ${argumentQuoter(dbUrl)}`)
@@ -45,14 +46,18 @@ export function buildRemoteTypesCommands({
 	remoteOutput = '/tmp/database.types.ts',
 	localOutputPath,
 	schemaName = 'public',
+	beforeCommand = '',
+	supabaseCommand = 'npx supabase',
 }) {
 	const remoteGenerateCommand = [
+		beforeCommand,
 		projectPath ? `cd ${quoteShellArgument(projectPath)}` : '',
 		buildCommand({
 			dbUrl,
 			outputPath: remoteOutput,
 			schemaName,
 			useLinkedProject: false,
+			supabaseCommand,
 			argumentQuoter: quoteRemoteShellArgument,
 		}),
 	]
@@ -93,6 +98,8 @@ async function main() {
 	const remoteProjectPath = getOption(parsedArguments, config, 'remote-project-path', 'supabase.remoteTypes.projectPath', process.env.SUPABASE_REMOTE_PROJECT_PATH || '')
 	const remoteDbUrl = getOption(parsedArguments, config, 'remote-db-url', 'supabase.remoteTypes.dbUrl', process.env.SUPABASE_REMOTE_DB_URL || '')
 	const remoteOutputPath = getOption(parsedArguments, config, 'remote-output', 'supabase.remoteTypes.remoteOutput', '/tmp/database.types.ts')
+	const remoteBeforeCommand = getOption(parsedArguments, config, 'remote-before-command', 'supabase.remoteTypes.beforeCommand', process.env.SUPABASE_REMOTE_BEFORE_COMMAND || '')
+	const remoteSupabaseCommand = getOption(parsedArguments, config, 'remote-supabase-command', 'supabase.remoteTypes.supabaseCommand', process.env.SUPABASE_REMOTE_SUPABASE_COMMAND || 'npx supabase')
 	const useRemoteTypes = Boolean(remoteSshHost)
 
 	if (useRemoteTypes && !remoteDbUrl) {
@@ -119,6 +126,8 @@ async function main() {
 			remoteOutput: remoteOutputPath,
 			localOutputPath: outputFilePath,
 			schemaName,
+			beforeCommand: remoteBeforeCommand,
+			supabaseCommand: remoteSupabaseCommand,
 		})
 
 		console.log(`📦 Project: ${remoteSshHost} (remote ssh)`)

@@ -216,6 +216,8 @@ export default {
 			projectPath: process.env.SUPABASE_REMOTE_PROJECT_PATH,
 			dbUrl: process.env.SUPABASE_REMOTE_DB_URL,
 			remoteOutput: '/tmp/database.types.ts',
+			beforeCommand: process.env.SUPABASE_REMOTE_BEFORE_COMMAND,
+			supabaseCommand: process.env.SUPABASE_REMOTE_SUPABASE_COMMAND,
 		},
 		linked: false,
 	},
@@ -227,6 +229,19 @@ La génération exécutera l'équivalent de :
 ```bash
 ssh vps 'cd /opt/supabase-projects/mysic && npx supabase gen types typescript --db-url "postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres" > /tmp/database.types.ts'
 scp vps:/tmp/database.types.ts ./types/database.types.ts
+```
+
+Si le VPS répond `command not found: npx`, configurez le chargement de Node dans le shell SSH non interactif :
+
+```bash
+SUPABASE_REMOTE_BEFORE_COMMAND='source ~/.nvm/nvm.sh'
+SUPABASE_REMOTE_SUPABASE_COMMAND='npx supabase'
+```
+
+Ou utilisez directement le binaire Supabase installé dans le projet distant :
+
+```bash
+SUPABASE_REMOTE_SUPABASE_COMMAND='./node_modules/.bin/supabase'
 ```
 
 ---

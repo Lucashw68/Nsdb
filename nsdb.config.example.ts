@@ -12,6 +12,8 @@ export default {
 		// 	projectPath: process.env.SUPABASE_REMOTE_PROJECT_PATH,
 		// 	dbUrl: process.env.SUPABASE_REMOTE_DB_URL,
 		// 	remoteOutput: '/tmp/database.types.ts',
+		// 	beforeCommand: process.env.SUPABASE_REMOTE_BEFORE_COMMAND,
+		// 	supabaseCommand: process.env.SUPABASE_REMOTE_SUPABASE_COMMAND,
 		// },
 		linked: false,
 	},
