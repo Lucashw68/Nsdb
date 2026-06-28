@@ -72,6 +72,7 @@
 		"clear": "node scripts/clear.js"
 	},
 	"files": [
+		"GET_STARTED.md",
 		"module.ts",
 		"runtime",
 		"scripts",

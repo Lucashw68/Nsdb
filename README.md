@@ -22,6 +22,8 @@ NSDB fournit :
 - une API unifiee pour Supabase Database et Supabase Storage
 - une integration compatible avec `@nuxtjs/supabase`, auth Supabase et RLS
 
+Guide d'installation complet pour Nuxt 4 : [GET_STARTED.md](./GET_STARTED.md)
+
 ---
 
 ## ⚙️ Installation
@@ -113,6 +115,30 @@ SUPABASE_PROJECT_ID=your-project-id
 ---
 
 ## 🧬 `nsdb.config.ts`
+
+Vous pouvez initialiser un projet avec :
+
+```bash
+npx @lucashw68/nsdb init
+# ou
+yarn nsdb init
+```
+
+Options utiles :
+
+```bash
+nsdb init --linked
+nsdb init --schema private
+nsdb init --project-id your-project-id
+nsdb init --force
+```
+
+`nsdb init` crée :
+
+- `nsdb.config.ts`
+- `.env.example` si absent
+- les dossiers `types`, `nsdb/schemas`, `nsdb/models`, `nsdb/composables`, `stores`
+- les scripts `nsdb:*` dans `package.json` sans écraser les scripts existants
 
 Ajoutez un fichier `nsdb.config.ts` à la racine du projet Nuxt :
 
