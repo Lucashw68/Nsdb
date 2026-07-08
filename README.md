@@ -482,10 +482,11 @@ const columns = [
 
 ```vue
 <NsdbList model="playlists" :page-size="6" searchable>
-	<template #default="{ rows, loading, currentPage, totalPages, nextPage, prevPage }">
+	<template #default="{ rows, loading, isEmpty, currentPage, totalPages, nextPage, prevPage }">
 		<p v-if="loading">Chargement...</p>
+		<p v-else-if="isEmpty">Aucune playlist</p>
 
-		<div class="grid gap-4 md:grid-cols-3">
+		<div v-else class="grid gap-4 md:grid-cols-3">
 			<article v-for="row in rows" :key="row.id">
 				<h2>{{ row.title }}</h2>
 			</article>
@@ -494,6 +495,19 @@ const columns = [
 		<button @click="prevPage">Precedent</button>
 		<span>{{ currentPage }} / {{ totalPages }}</span>
 		<button @click="nextPage">Suivant</button>
+	</template>
+</NsdbList>
+```
+
+Slot état vide :
+
+```vue
+<NsdbList model="playlists" :columns="columns">
+	<template #empty="{ model, reload }">
+		<div>
+			Aucun résultat pour {{ model }}.
+			<button type="button" @click="reload">Recharger</button>
+		</div>
 	</template>
 </NsdbList>
 ```

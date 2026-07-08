@@ -311,6 +311,8 @@ const serverQuery = computed(() => {
 })
 
 const displayRows = computed(() => rows.value)
+const hasRows = computed(() => displayRows.value.length > 0)
+const isEmpty = computed(() => !loading.value && !error.value && !hasRows.value)
 
 async function load() {
 	loading.value = true
@@ -435,6 +437,8 @@ async function handleDelete(row: any) {
 		:model="props.model"
 		:rows="displayRows"
 		:raw-rows="rows"
+		:has-rows="hasRows"
+		:is-empty="isEmpty"
 		:columns="effectiveColumns"
 		:loading="loading"
 		:error="error"
@@ -467,6 +471,8 @@ async function handleDelete(row: any) {
 					name="header"
 					:model="props.model"
 					:rows="rows"
+					:has-rows="hasRows"
+					:is-empty="isEmpty"
 					:loading="loading"
 					:error="error"
 					:query="serverQuery"
@@ -528,7 +534,20 @@ async function handleDelete(row: any) {
 				</template>
 
 				<template v-else-if="displayRows.length === 0">
-					<slot name="empty" :columns="effectiveColumns">
+					<slot
+						name="empty"
+						:model="props.model"
+						:rows="displayRows"
+						:raw-rows="rows"
+						:columns="effectiveColumns"
+						:loading="loading"
+						:error="error"
+						:query="serverQuery"
+						:filters="effectiveWhere"
+						:search="searchTerm"
+						:search-columns="effectiveSearchColumns"
+						:reload="load"
+					>
 						<div :class="classes.emptyCell">
 							Aucun résultat
 						</div>
@@ -618,7 +637,20 @@ async function handleDelete(row: any) {
 						</template>
 
 						<template v-else-if="displayRows.length === 0">
-							<slot name="empty" :columns="effectiveColumns">
+							<slot
+								name="empty"
+								:model="props.model"
+								:rows="displayRows"
+								:raw-rows="rows"
+								:columns="effectiveColumns"
+								:loading="loading"
+								:error="error"
+								:query="serverQuery"
+								:filters="effectiveWhere"
+								:search="searchTerm"
+								:search-columns="effectiveSearchColumns"
+								:reload="load"
+							>
 								<tr>
 									<td :colspan="effectiveColumns.length + 1" :class="classes.emptyCell">
 										Aucun résultat
