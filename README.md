@@ -482,7 +482,7 @@ const columns = [
 
 ```vue
 <NsdbList model="playlists" :page-size="6" searchable>
-	<template #default="{ rows, loading, isEmpty, currentPage, totalPages, nextPage, prevPage }">
+	<template #default="{ rows, loading, isEmpty, currentPage, totalPages, pageItems, canGoPrev, canGoNext, goToPage, nextPage, prevPage }">
 		<p v-if="loading">Chargement...</p>
 		<p v-else-if="isEmpty">Aucune playlist</p>
 
@@ -492,9 +492,38 @@ const columns = [
 			</article>
 		</div>
 
-		<button @click="prevPage">Precedent</button>
+		<button :disabled="!canGoPrev" @click="prevPage">Precedent</button>
+		<button
+			v-for="page in pageItems"
+			:key="String(page)"
+			:disabled="page === '...'"
+			@click="page !== '...' && goToPage(page)"
+		>
+			{{ page }}
+		</button>
 		<span>{{ currentPage }} / {{ totalPages }}</span>
-		<button @click="nextPage">Suivant</button>
+		<button :disabled="!canGoNext" @click="nextPage">Suivant</button>
+	</template>
+</NsdbList>
+```
+
+Slot pagination seul :
+
+```vue
+<NsdbList model="playlists" :columns="columns" :page-size="10">
+	<template #pagination="{ pageItems, currentPage, canGoPrev, canGoNext, prevPage, nextPage, goToPage }">
+		<nav>
+			<button :disabled="!canGoPrev" @click="prevPage">Precedent</button>
+			<button
+				v-for="page in pageItems"
+				:key="String(page)"
+				:disabled="page === '...' || page === currentPage"
+				@click="page !== '...' && goToPage(page)"
+			>
+				{{ page }}
+			</button>
+			<button :disabled="!canGoNext" @click="nextPage">Suivant</button>
+		</nav>
 	</template>
 </NsdbList>
 ```

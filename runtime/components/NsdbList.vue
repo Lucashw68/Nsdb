@@ -313,6 +313,24 @@ const serverQuery = computed(() => {
 const displayRows = computed(() => rows.value)
 const hasRows = computed(() => displayRows.value.length > 0)
 const isEmpty = computed(() => !loading.value && !error.value && !hasRows.value)
+const paginationSlotProps = computed(() => ({
+	currentPage: currentPage.value,
+	pageSize: effectiveLimit.value,
+	limit: effectiveLimit.value,
+	offset: effectiveOffset.value,
+	totalCount: totalCount.value,
+	totalPages: totalPages.value,
+	canGoPrev: canGoPrev.value,
+	canGoNext: canGoNext.value,
+	pageItems: pageItems.value,
+	showFirstLast: showFirstLast.value,
+	showPageNumbers: showPageNumbers.value,
+	goToPage,
+	firstPage: handleFirstPage,
+	lastPage: handleLastPage,
+	prevPage: handlePrevPage,
+	nextPage: handleNextPage,
+}))
 
 async function load() {
 	loading.value = true
@@ -454,6 +472,10 @@ async function handleDelete(row: any) {
 		:total-pages="totalPages"
 		:can-go-prev="canGoPrev"
 		:can-go-next="canGoNext"
+		:page-items="pageItems"
+		:show-first-last="showFirstLast"
+		:show-page-numbers="showPageNumbers"
+		:pagination="paginationSlotProps"
 		:go-to-page="goToPage"
 		:first-page="handleFirstPage"
 		:last-page="handleLastPage"
@@ -716,6 +738,9 @@ async function handleDelete(row: any) {
 					:sort-state="sortState"
 					:set-sort="setSort"
 					:current-page="currentPage"
+					:page-size="effectiveLimit"
+					:limit="effectiveLimit"
+					:offset="effectiveOffset"
 					:total-count="totalCount"
 					:total-pages="totalPages"
 					:can-go-prev="canGoPrev"
@@ -726,6 +751,9 @@ async function handleDelete(row: any) {
 					:prev-page="handlePrevPage"
 					:next-page="handleNextPage"
 					:page-items="pageItems"
+					:show-first-last="showFirstLast"
+					:show-page-numbers="showPageNumbers"
+					:pagination="paginationSlotProps"
 				>
 					<div class="text-sm opacity-70">
 						Page {{ currentPage }}
@@ -733,64 +761,88 @@ async function handleDelete(row: any) {
 						<span v-if="totalCount != null"> - {{ totalCount }} éléments</span>
 					</div>
 
-					<div :class="classes.pagination">
-						<button
-							v-if="showFirstLast && totalPages"
-							type="button"
-							:class="[classes.pageButton, (!canGoPrev || loading) && classes.pageButtonDisabled]"
-							:disabled="!canGoPrev || loading"
-							@click="handleFirstPage"
-						>
-							Première
-						</button>
+					<slot
+						name="pagination"
+						:rows="displayRows"
+						:model="props.model"
+						:loading="loading"
+						:current-page="currentPage"
+						:page-size="effectiveLimit"
+						:limit="effectiveLimit"
+						:offset="effectiveOffset"
+						:total-count="totalCount"
+						:total-pages="totalPages"
+						:can-go-prev="canGoPrev"
+						:can-go-next="canGoNext"
+						:page-items="pageItems"
+						:show-first-last="showFirstLast"
+						:show-page-numbers="showPageNumbers"
+						:go-to-page="goToPage"
+						:first-page="handleFirstPage"
+						:last-page="handleLastPage"
+						:prev-page="handlePrevPage"
+						:next-page="handleNextPage"
+						:pagination="paginationSlotProps"
+					>
+						<div :class="classes.pagination">
+							<button
+								v-if="showFirstLast && totalPages"
+								type="button"
+								:class="[classes.pageButton, (!canGoPrev || loading) && classes.pageButtonDisabled]"
+								:disabled="!canGoPrev || loading"
+								@click="handleFirstPage"
+							>
+								Première
+							</button>
 
-						<button
-							type="button"
-							:class="[classes.pageButton, (!canGoPrev || loading) && classes.pageButtonDisabled]"
-							:disabled="!canGoPrev || loading"
-							@click="handlePrevPage"
-						>
-							Précédent
-						</button>
+							<button
+								type="button"
+								:class="[classes.pageButton, (!canGoPrev || loading) && classes.pageButtonDisabled]"
+								:disabled="!canGoPrev || loading"
+								@click="handlePrevPage"
+							>
+								Précédent
+							</button>
 
-						<template v-if="showPageNumbers && totalPages">
-							<template v-for="it in pageItems" :key="String(it) + '-' + currentPage">
-								<span v-if="it === '...'" class="px-2 opacity-60">...</span>
-								<button
-									v-else
-									type="button"
-									:class="[
-										classes.pageButton,
-										it === currentPage && classes.pageButtonActive,
-										loading && classes.pageButtonDisabled
-									]"
-									:disabled="loading"
-									@click="goToPage(it)"
-								>
-									{{ it }}
-								</button>
+							<template v-if="showPageNumbers && totalPages">
+								<template v-for="it in pageItems" :key="String(it) + '-' + currentPage">
+									<span v-if="it === '...'" class="px-2 opacity-60">...</span>
+									<button
+										v-else
+										type="button"
+										:class="[
+											classes.pageButton,
+											it === currentPage && classes.pageButtonActive,
+											loading && classes.pageButtonDisabled
+										]"
+										:disabled="loading"
+										@click="goToPage(it)"
+									>
+										{{ it }}
+									</button>
+								</template>
 							</template>
-						</template>
 
-						<button
-							type="button"
-							:class="[classes.pageButton, (!canGoNext || loading) && classes.pageButtonDisabled]"
-							:disabled="!canGoNext || loading"
-							@click="handleNextPage"
-						>
-							Suivant
-						</button>
+							<button
+								type="button"
+								:class="[classes.pageButton, (!canGoNext || loading) && classes.pageButtonDisabled]"
+								:disabled="!canGoNext || loading"
+								@click="handleNextPage"
+							>
+								Suivant
+							</button>
 
-						<button
-							v-if="showFirstLast && totalPages"
-							type="button"
-							:class="[classes.pageButton, (!canGoNext || loading) && classes.pageButtonDisabled]"
-							:disabled="!canGoNext || loading"
-							@click="handleLastPage"
-						>
-							Dernière
-						</button>
-					</div>
+							<button
+								v-if="showFirstLast && totalPages"
+								type="button"
+								:class="[classes.pageButton, (!canGoNext || loading) && classes.pageButtonDisabled]"
+								:disabled="!canGoNext || loading"
+								@click="handleLastPage"
+							>
+								Dernière
+							</button>
+						</div>
+					</slot>
 				</slot>
 			</div>
 		</div>
