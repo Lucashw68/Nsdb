@@ -24,6 +24,7 @@ export function __HOOK__(opts: { store?: boolean } = {}) {
 
 	return {
 		items: model.items,
+		totalCount: model.totalCount,
 		schema: __PASCAL__Schema,
 		fields,
 		editableKeys,

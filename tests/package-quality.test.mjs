@@ -26,3 +26,10 @@ test('runtime Vue components do not rely on @ts-nocheck', async () => {
 		assert.equal(content.includes('@ts-nocheck'), false, `${relativePath} should stay typechecked`)
 	}
 })
+
+test('generated model template exposes totalCount from the runtime model', async () => {
+	const content = await readFile(path.join(packageRoot, 'templates/model.template.ts'), 'utf8')
+
+	assert.match(content, /items:\s*model\.items/)
+	assert.match(content, /totalCount:\s*model\.totalCount/)
+})
