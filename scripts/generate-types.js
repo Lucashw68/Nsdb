@@ -39,6 +39,12 @@ export function buildCommand({
 	return parts.join(' ')
 }
 
+export function buildLocalTypesEnvironment({ dbUrl, environment = process.env }) {
+	const commandEnvironment = { ...environment }
+	if (dbUrl) delete commandEnvironment.SUPABASE_PROJECT_ID
+	return commandEnvironment
+}
+
 export function buildRemoteTypesCommands({
 	sshHost,
 	projectPath,
@@ -164,7 +170,10 @@ async function main() {
 	console.log('🔄 Generating Supabase types...')
 
 	try {
-		run(commandLine, { inherit: true })
+		run(commandLine, {
+			inherit: true,
+			env: buildLocalTypesEnvironment({ dbUrl }),
+		})
 		console.log('✅ Types generated successfully.')
 	} catch (error) {
 		console.error('❌ Failed to generate Supabase types.')

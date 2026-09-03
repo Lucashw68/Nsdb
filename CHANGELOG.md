@@ -10,6 +10,8 @@
 - stabilizes optional identity-scoped Pinia caching and opt-in Realtime;
 - stabilizes the metadata-driven `NsdbList` and `NsdbForm` contracts;
 - prevents `NsdbList` automatic loading from producing SSR hydration races;
+- keeps explicit `--db-url` generation independent from a remote project ID
+  loaded through `.env`;
 - declares the Nuxt 4.2.1 / Vue 3.5.24 release-candidate compatibility floor;
 - validates the source package through three independent Nuxt tarball
   consumers, local Supabase/Auth/RLS/Storage/Realtime and Chromium.

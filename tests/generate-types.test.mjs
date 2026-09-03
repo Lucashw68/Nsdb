@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCommand, buildRemoteTypesCommands } from '../scripts/generate-types.js'
+import {
+	buildCommand,
+	buildLocalTypesEnvironment,
+	buildRemoteTypesCommands,
+} from '../scripts/generate-types.js'
 
 test('buildCommand supports project id mode', () => {
 	const command = buildCommand({
@@ -42,6 +46,32 @@ test('buildCommand supports db url mode for self-hosted Supabase', () => {
 		command,
 		"npx supabase gen types typescript --schema public --db-url 'postgresql://postgres:password@localhost:5432/postgres' > 'types/database.types.ts'"
 	)
+})
+
+test('db url mode does not leak a conflicting project id to Supabase CLI', () => {
+	const environment = buildLocalTypesEnvironment({
+		dbUrl: 'postgresql://postgres:password@localhost:5432/postgres',
+		environment: {
+			PATH: '/usr/bin',
+			SUPABASE_PROJECT_ID: 'remote-project',
+		},
+	})
+
+	assert.deepEqual(environment, { PATH: '/usr/bin' })
+})
+
+test('project id mode preserves the Supabase environment', () => {
+	const environment = buildLocalTypesEnvironment({
+		environment: {
+			PATH: '/usr/bin',
+			SUPABASE_PROJECT_ID: 'remote-project',
+		},
+	})
+
+	assert.deepEqual(environment, {
+		PATH: '/usr/bin',
+		SUPABASE_PROJECT_ID: 'remote-project',
+	})
 })
 
 test('buildRemoteTypesCommands builds ssh and scp commands', () => {
