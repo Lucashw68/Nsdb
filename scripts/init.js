@@ -5,6 +5,7 @@ import { ensureDir, exists, readText, writeText } from '../helpers/io.js'
 
 const DEFAULT_PATHS = {
 	types: 'types/database.types.ts',
+	metadata: 'nsdb/database.metadata.json',
 	enums: 'nsdb/enums.ts',
 	schemas: 'nsdb/schemas',
 	models: 'nsdb/models',
@@ -15,6 +16,7 @@ const DEFAULT_PATHS = {
 const NSDB_SCRIPTS = {
 	'nsdb:init': 'nsdb init',
 	'nsdb:types': 'nsdb generate:types',
+	'nsdb:metadata': 'nsdb generate:metadata',
 	'nsdb:enums': 'nsdb generate:enums',
 	'nsdb:schemas': 'nsdb generate:schemas',
 	'nsdb:models': 'nsdb generate:models',
@@ -35,6 +37,7 @@ export function buildNsdbConfigTemplate({
 	linked = false,
 	paths = DEFAULT_PATHS,
 } = {}) {
+	const usesDefaultPaths = Object.entries(DEFAULT_PATHS).every(([key, value]) => paths[key] === value)
 	const projectIdLine = linked || dbUrlExpression || remoteTypes
 		? ''
 		: `\n\t\tprojectId: ${projectIdExpression},`
@@ -51,6 +54,15 @@ export function buildNsdbConfigTemplate({
 \t\t\tsupabaseCommand: ${remoteTypes.supabaseCommand},
 \t\t},`
 		: ''
+	const pathsBlock = usesDefaultPaths
+		? ''
+		: `
+	paths: {
+${Object.entries(paths).map(([key, value]) => `\t\t${key}: ${quoteString(value)},`).join('\n')}
+	},
+	imports: {
+		databaseTypes: '~~/types/database.types',
+	},`
 
 	return `import type { NsdbConfig } from '@lucashw68/nsdb/types/config'
 
@@ -58,18 +70,7 @@ export default {
 \tsupabase: {
 \t\tschema: ${quoteString(schemaName)},${projectIdLine}${dbUrlLine}${remoteTypesLine}
 \t\tlinked: ${linked ? 'true' : 'false'},
-\t},
-\tpaths: {
-\t\ttypes: ${quoteString(paths.types)},
-\t\tenums: ${quoteString(paths.enums)},
-\t\tschemas: ${quoteString(paths.schemas)},
-\t\tmodels: ${quoteString(paths.models)},
-\t\tcomposables: ${quoteString(paths.composables)},
-\t\tstores: ${quoteString(paths.stores)},
-\t},
-\timports: {
-\t\tdatabaseTypes: '~~/types/database.types',
-\t},
+\t},${pathsBlock}
 } satisfies NsdbConfig
 `
 }
@@ -118,6 +119,7 @@ function writeFileIfAllowed(filePath, content, { force = false, label }) {
 function ensureConfiguredDirectories(currentWorkingDirectory, paths = DEFAULT_PATHS) {
 	const directories = [
 		path.dirname(paths.types),
+		path.dirname(paths.metadata),
 		path.dirname(paths.enums),
 		paths.schemas,
 		paths.models,

@@ -2,7 +2,12 @@
 import { Project } from 'ts-morph'
 
 export function createTsProject() {
-	return new Project({ skipAddingFilesFromTsConfig: true })
+	// Supabase's Row/Insert distinction depends on preserving `null` in unions.
+	// The in-memory generator project must not inherit TypeScript's loose default.
+	return new Project({
+		skipAddingFilesFromTsConfig: true,
+		compilerOptions: { strictNullChecks: true },
+	})
 }
 
 export function addSourceFile(project, absPath) {

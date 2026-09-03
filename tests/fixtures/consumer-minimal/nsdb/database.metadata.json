@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "schema": "public",
+  "tables": {
+    "todos": {
+      "primaryKey": ["id"],
+      "uniqueConstraints": [{ "name": "todos_pkey", "columns": ["id"] }],
+      "relationships": [],
+      "columns": {
+        "id": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": true, "insertable": true, "updatable": false },
+        "title": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "completed": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "created_at": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": false }
+      }
+    }
+  }
+}

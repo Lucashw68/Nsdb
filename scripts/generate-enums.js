@@ -10,6 +10,7 @@ import {
 	getPublicEnumsType
 } from '../helpers/ts.js'
 import { toPascal } from '../helpers/names.js'
+import { GENERATED_FILE_MARKER } from '../helpers/generated.js'
 
 /**
  * Build the metadata needed to emit strongly typed enums derived from Database["public"]["Enums"].
@@ -35,9 +36,8 @@ function extractEnumDescriptors(sourceFile, enumsType) {
 
 function buildContent(databaseImportPath, descriptors) {
 	const headerLines = [
-		`// ⚠️ auto-generated`,
+		GENERATED_FILE_MARKER,
 		`// Source: Database["public"]["Enums"]`,
-		`// ${new Date().toISOString()}`,
 		``,
 		`import type { Database } from '${databaseImportPath}'`,
 		``,
@@ -62,7 +62,7 @@ function buildContent(databaseImportPath, descriptors) {
 	return [...headerLines, ...enumBlocks, ...enumMapLines].join('\n')
 }
 
-async function main() {
+export async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
 	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
@@ -86,7 +86,7 @@ async function main() {
 	if (!enumsType) {
 		console.warn('⚠️ Database["public"]["Enums"] not found — writing an empty file.')
 		ensureDir(path.dirname(outputFilePath))
-		writeText(outputFilePath, `// auto-generated\nexport {}\n`)
+		writeText(outputFilePath, `${GENERATED_FILE_MARKER}\nexport {}\n`)
 		console.log(`✅ enums: ${path.relative(currentWorkingDirectory, outputFilePath)}`)
 		return
 	}

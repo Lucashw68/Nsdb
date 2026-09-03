@@ -11,6 +11,7 @@ const commands = {
 	'clear': path.resolve(currentDirectoryPath, '../scripts/clear.js'),
 	'init': path.resolve(currentDirectoryPath, '../scripts/init.js'),
 	'generate:types': path.resolve(currentDirectoryPath, '../scripts/generate-types.js'),
+	'generate:metadata': path.resolve(currentDirectoryPath, '../scripts/generate-metadata.js'),
 	'generate:enums': path.resolve(currentDirectoryPath, '../scripts/generate-enums.js'),
 	'generate:schemas': path.resolve(currentDirectoryPath, '../scripts/generate-schemas.js'),
 	'generate:models': path.resolve(currentDirectoryPath, '../scripts/generate-models.js'),
@@ -18,6 +19,7 @@ const commands = {
 	'generate:stores': path.resolve(currentDirectoryPath, '../scripts/generate-stores.js'),
 	'generate:all': [
 		path.resolve(currentDirectoryPath, '../scripts/generate-types.js'),
+		path.resolve(currentDirectoryPath, '../scripts/generate-metadata.js'),
 		path.resolve(currentDirectoryPath, '../scripts/generate-enums.js'),
 		path.resolve(currentDirectoryPath, '../scripts/generate-schemas.js'),
 		path.resolve(currentDirectoryPath, '../scripts/generate-models.js'),
@@ -25,6 +27,21 @@ const commands = {
 		path.resolve(currentDirectoryPath, '../scripts/generate-models.js'),
 		path.resolve(currentDirectoryPath, '../scripts/generate-composables.js'),
 	],
+}
+
+const help = `NSDB — Nuxt Supabase Data Bridge
+
+Usage:
+  nsdb init [options]
+  nsdb generate:all [options]
+  nsdb generate:types|metadata|enums|schemas|models|stores|composables [options]
+  nsdb clear [--dry-run]
+
+Run "nsdb init --help" is not required: init options are documented in GET_STARTED.md.`
+
+if (!process.argv[2] || ['help', '--help', '-h'].includes(process.argv[2])) {
+	console.log(help)
+	process.exit(0)
 }
 
 const command = commands[process.argv[2]]

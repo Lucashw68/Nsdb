@@ -19,6 +19,25 @@ test('buildNsdbConfigTemplate supports linked projects', () => {
 	assert.match(template, /schema: 'private'/)
 	assert.match(template, /linked: true/)
 	assert.doesNotMatch(template, /projectId:/)
+	assert.doesNotMatch(template, /paths:/)
+})
+
+test('buildNsdbConfigTemplate only emits non-default path configuration', () => {
+	const template = buildNsdbConfigTemplate({
+		linked: true,
+		paths: {
+			types: 'generated/database.ts',
+			metadata: 'generated/metadata.json',
+			enums: 'generated/enums.ts',
+			schemas: 'generated/schemas',
+			models: 'generated/models',
+			composables: 'generated/composables',
+			stores: 'generated/stores',
+		},
+	})
+
+	assert.match(template, /paths:/)
+	assert.match(template, /types: 'generated\/database\.ts'/)
 })
 
 test('buildNsdbConfigTemplate supports self-hosted db url projects', () => {
@@ -66,6 +85,7 @@ test('mergePackageScripts preserves existing scripts', () => {
 	assert.equal(packageJson.scripts.dev, 'nuxt dev')
 	assert.equal(packageJson.scripts['nsdb:init'], 'nsdb init')
 	assert.equal(packageJson.scripts['nsdb:types'], 'nsdb generate:types')
+	assert.equal(packageJson.scripts['nsdb:metadata'], 'nsdb generate:metadata')
 })
 
 test('initNsdb writes config, env example, directories and package scripts', async () => {
@@ -85,6 +105,7 @@ test('initNsdb writes config, env example, directories and package scripts', asy
 
 	assert.match(config, /schema: 'private'/)
 	assert.match(config, /linked: true/)
+	assert.doesNotMatch(config, /paths:/)
 	assert.equal(packageJson.scripts.dev, 'nuxt dev')
 	assert.equal(packageJson.scripts['nsdb:all'], 'nsdb generate:all')
 	assert.equal(fs.existsSync(path.join(temporaryDirectory, '.env.example')), true)

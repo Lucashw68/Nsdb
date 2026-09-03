@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "schema": "public",
+  "tables": {
+    "authors": {
+      "primaryKey": ["id"],
+      "uniqueConstraints": [{ "name": "authors_pkey", "columns": ["id"] }],
+      "relationships": [],
+      "columns": {
+        "id": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": true, "insertable": true, "updatable": false },
+        "name": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true }
+      }
+    },
+    "posts": {
+      "primaryKey": ["id"],
+      "uniqueConstraints": [{ "name": "posts_pkey", "columns": ["id"] }],
+      "relationships": [{
+        "foreignKeyName": "posts_author_id_fkey",
+        "columns": ["author_id"],
+        "referencedRelation": "authors",
+        "referencedColumns": ["id"],
+        "isOneToOne": false
+      }],
+      "columns": {
+        "id": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": true, "insertable": true, "updatable": false },
+        "author_id": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "title": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true }
+      }
+    },
+    "messages": {
+      "primaryKey": ["id"],
+      "uniqueConstraints": [{ "name": "messages_pkey", "columns": ["id"] }],
+      "relationships": [
+        { "foreignKeyName": "messages_sender_id_fkey", "columns": ["sender_id"], "referencedRelation": "authors", "referencedColumns": ["id"], "isOneToOne": false },
+        { "foreignKeyName": "messages_receiver_id_fkey", "columns": ["receiver_id"], "referencedRelation": "authors", "referencedColumns": ["id"], "isOneToOne": false }
+      ],
+      "columns": {
+        "id": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": true, "insertable": true, "updatable": false },
+        "sender_id": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "receiver_id": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "body": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true }
+      }
+    },
+    "categories": {
+      "primaryKey": ["id"],
+      "uniqueConstraints": [{ "name": "categories_pkey", "columns": ["id"] }],
+      "relationships": [{ "foreignKeyName": "categories_parent_id_fkey", "columns": ["parent_id"], "referencedRelation": "categories", "referencedColumns": ["id"], "isOneToOne": false }],
+      "columns": {
+        "id": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": true, "insertable": true, "updatable": false },
+        "parent_id": { "nullable": true, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "name": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true }
+      }
+    },
+    "tags": {
+      "primaryKey": ["id"],
+      "uniqueConstraints": [{ "name": "tags_pkey", "columns": ["id"] }],
+      "relationships": [],
+      "columns": {
+        "id": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": true, "insertable": true, "updatable": false },
+        "name": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true }
+      }
+    },
+    "post_tags": {
+      "primaryKey": ["id"],
+      "uniqueConstraints": [{ "name": "post_tags_post_id_tag_id_key", "columns": ["post_id", "tag_id"] }],
+      "relationships": [
+        { "foreignKeyName": "post_tags_post_id_fkey", "columns": ["post_id"], "referencedRelation": "posts", "referencedColumns": ["id"], "isOneToOne": false },
+        { "foreignKeyName": "post_tags_tag_id_fkey", "columns": ["tag_id"], "referencedRelation": "tags", "referencedColumns": ["id"], "isOneToOne": false }
+      ],
+      "columns": {
+        "id": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": true, "insertable": true, "updatable": false },
+        "post_id": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "tag_id": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true }
+      }
+    },
+    "schema_features": {
+      "primaryKey": ["slug"],
+      "uniqueConstraints": [{ "name": "schema_features_pkey", "columns": ["slug"] }],
+      "relationships": [],
+      "columns": {
+        "slug": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": true, "insertable": true, "updatable": false },
+        "sequence_id": { "nullable": false, "hasDefault": true, "identity": "always", "generated": false, "primaryKey": false, "insertable": false, "updatable": false },
+        "required_field": { "nullable": false, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "custom_default": { "nullable": false, "hasDefault": true, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "nullable_field": { "nullable": true, "hasDefault": false, "identity": false, "generated": false, "primaryKey": false, "insertable": true, "updatable": true },
+        "computed_label": { "nullable": false, "hasDefault": false, "identity": false, "generated": "stored", "primaryKey": false, "insertable": false, "updatable": false }
+      }
+    }
+  }
+}

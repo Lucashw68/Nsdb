@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
-import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels'
-import * as nsdbSchemas from '~~/nsdb/schemas'
+import { ref, watch, computed, onBeforeUnmount, onMounted, useId } from 'vue'
+import { useSupabaseUser } from '#imports'
+import { useNsdbModel } from '#build/nsdb/registry'
+import * as nsdbSchemas from '#build/nsdb/schemas'
 import type { Column, NsdbTableClasses, OrderDirection, SortState, WhereClause } from '@lucashw68/nsdb/types/list'
 
 const defaultClasses: NsdbTableClasses = {
@@ -60,15 +61,27 @@ const props = defineProps<{
 	searchColumns?: string[]
 	searchPlaceholder?: string
 	searchDebounceMs?: number
+	store?: boolean
 }>()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-const nsdbModel = useNsdbModel(props.model, { store: false })
-const rows = computed(() => nsdbModel.items.value ?? [])
+type NsdbListModel = {
+	primaryKey?: string
+	items: { value?: Array<Record<string, any>> }
+	totalCount?: { value?: number | null }
+	fetch: (query?: Record<string, any>) => Promise<Array<Record<string, any>>>
+	remove?: (id: string | number) => Promise<void> | void
+}
+
+const nsdbModel = computed(() =>
+	useNsdbModel(props.model, { store: props.store ?? false }) as unknown as NsdbListModel
+)
+const supabaseUser = useSupabaseUser()
+const rows = computed(() => nsdbModel.value.items.value ?? [])
 const totalCount = computed<number | null>(() => {
-	return (nsdbModel as any)?.totalCount?.value ?? null
+	return (nsdbModel.value as any)?.totalCount?.value ?? null
 })
 
 const currentPage = ref(1)
@@ -122,6 +135,10 @@ const showPageNumbers = computed(() => props.showPageNumbers ?? true)
 const searchTerm = ref(props.search ?? '')
 const debouncedSearchTerm = ref(props.search ?? '')
 let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null
+let loadSequence = 0
+let isMounted = false
+const deletingRows = ref(new Set<string | number>())
+const searchInputId = `nsdb-list-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}-search`
 
 const pageItems = computed<(number | '...')[]>(() => {
 	if (!showPageNumbers.value) return []
@@ -159,6 +176,12 @@ const effectiveColumns = computed<Column[]>(() => {
 		})
 		return props.columns
 	}
+	const schema = modelSchema.value
+	if (schema) {
+		return Object.entries(schema)
+			.filter(([, field]) => field?.selectable !== false && !field?.hidden && !field?.serverOnly)
+			.map(([key, field]) => ({ key, label: field?.label ?? key }))
+	}
 
 	const first = rows.value[0]
 	if (!first) return []
@@ -178,7 +201,7 @@ const modelSchema = computed<Record<string, any> | null>(() => {
 	return (nsdbSchemas as Record<string, any>)[schemaExportName] ?? null
 })
 
-function isTextSearchColumn(columnKey: string) {
+function isTextSearchColumn(columnKey: string, warn = false) {
 	const schema = modelSchema.value
 	if (!schema) return true
 	if (columnKey.includes('.')) return true
@@ -187,7 +210,7 @@ function isTextSearchColumn(columnKey: string) {
 	if (!field) return true
 
 	const isTextField = field.type === 'text' || field.type === 'textarea'
-	if (!isTextField) {
+	if (!isTextField && warn) {
 		console.warn(
 			`[NsdbList] "${columnKey}" ignored from searchColumns on "${props.model}" because its schema type is "${field.type}". Use filters for non-text columns.`
 		)
@@ -209,17 +232,17 @@ function isSortableColumn(columnKey: string) {
 
 const effectiveSearchColumns = computed(() => {
 	if (props.searchColumns?.length) {
-		return props.searchColumns.filter(isTextSearchColumn)
+		return props.searchColumns.filter(column => isTextSearchColumn(column, true))
 	}
 
 	if (props.query?.searchColumns?.length) {
-		return props.query.searchColumns.filter(isTextSearchColumn)
+		return props.query.searchColumns.filter(column => isTextSearchColumn(column, true))
 	}
 
 	return effectiveColumns.value
 		.map(column => column.key)
 		.filter(columnKey => !columnKey.includes('.'))
-		.filter(isTextSearchColumn)
+		.filter(column => isTextSearchColumn(column))
 })
 
 const effectiveSearch = computed(() => {
@@ -243,6 +266,11 @@ async function setSort(key: string | null, direction: OrderDirection | null = 'a
 	sortState.value = { key, direction: key ? direction : null }
 	currentPage.value = 1
 	await load()
+}
+
+function sortAriaValue(column: Column) {
+	if (sortState.value.key !== column.key || !sortState.value.direction) return 'none'
+	return sortState.value.direction === 'asc' ? 'ascending' : 'descending'
 }
 
 async function toggleSort(column: Column) {
@@ -313,6 +341,7 @@ const serverQuery = computed(() => {
 const displayRows = computed(() => rows.value)
 const hasRows = computed(() => displayRows.value.length > 0)
 const isEmpty = computed(() => !loading.value && !error.value && !hasRows.value)
+const emptyMessage = computed(() => effectiveSearch.value ? 'Aucun résultat pour cette recherche' : 'Aucune donnée')
 const paginationSlotProps = computed(() => ({
 	currentPage: currentPage.value,
 	pageSize: effectiveLimit.value,
@@ -333,21 +362,25 @@ const paginationSlotProps = computed(() => ({
 }))
 
 async function load() {
+	const requestId = ++loadSequence
 	loading.value = true
 	error.value = null
 
 	try {
-		if (typeof (nsdbModel as any).fetch === 'function') {
-			await (nsdbModel as any).fetch(serverQuery.value)
+		if (typeof (nsdbModel.value as any).fetch === 'function') {
+			await (nsdbModel.value as any).fetch(serverQuery.value)
 		} else {
 			console.warn('[NsdbList] No fetch() found on nsdbModel for', props.model)
 		}
 	} catch (e: any) {
+		if (requestId !== loadSequence) return
 		error.value = e?.message ?? 'Erreur de chargement'
 	} finally {
-		loading.value = false
+		if (requestId === loadSequence) loading.value = false
 	}
 }
+
+defineExpose({ refresh: load })
 
 async function goToPage(page: number) {
 	const tp = totalPages.value
@@ -390,9 +423,9 @@ watch(
 	],
 	() => {
 		currentPage.value = 1
-		load()
+		if (isMounted) void load()
 	},
-	{ immediate: true, deep: true }
+	{ deep: true }
 )
 
 watch(
@@ -403,7 +436,7 @@ watch(
 			direction: sortBy ? sortDirection ?? 'asc' : null,
 		}
 		currentPage.value = 1
-		load()
+		if (isMounted) void load()
 	}
 )
 
@@ -415,6 +448,18 @@ watch(
 )
 
 watch(
+	() => supabaseUser.value?.id ?? null,
+	() => {
+		// Quarantine rendered rows synchronously across logout/account switches.
+		const modelItems = nsdbModel.value.items
+		if (modelItems && 'value' in modelItems) modelItems.value = []
+		currentPage.value = 1
+		if (isMounted) void load()
+	},
+	{ flush: 'sync' },
+)
+
+watch(
 	searchTerm,
 	(searchValue) => {
 		if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout)
@@ -422,18 +467,31 @@ watch(
 		searchDebounceTimeout = setTimeout(() => {
 			debouncedSearchTerm.value = searchValue
 			currentPage.value = 1
-			load()
+			if (isMounted) void load()
 		}, props.searchDebounceMs ?? 300)
 	}
 )
 
+onMounted(() => {
+	isMounted = true
+	void load()
+})
+
+onBeforeUnmount(() => {
+	isMounted = false
+	if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout)
+	loadSequence++
+})
+
 async function handleDelete(row: any) {
-	const id = row?.id
+	const id = row?.[nsdbModel.value.primaryKey ?? 'id']
 	if (id == null) return
+	if (deletingRows.value.has(id)) return
 
 	try {
-		if (typeof (nsdbModel as any).remove === 'function') {
-			await (nsdbModel as any).remove(id)
+		deletingRows.value.add(id)
+		if (typeof (nsdbModel.value as any).remove === 'function') {
+			await (nsdbModel.value as any).remove(id)
 		} else {
 			console.warn('[NsdbList] No remove() method found on nsdbModel for', props.model)
 			return
@@ -444,9 +502,30 @@ async function handleDelete(row: any) {
 		}
 
 		await load()
-	} catch (e) {
+	} catch (e: any) {
 		console.error('[NsdbList] Error while deleting row:', e)
+		error.value = e?.message ?? 'Erreur de suppression'
+	} finally {
+		deletingRows.value.delete(id)
 	}
+}
+
+function displayValue(value: unknown) {
+	if (value == null || value === '') return 'Inconnu'
+	if (Array.isArray(value)) return value.length === 0 ? '—' : `${value.length} élément${value.length > 1 ? 's' : ''}`
+	if (typeof value === 'object') {
+		const record = value as Record<string, unknown>
+		for (const key of ['label', 'name', 'title']) {
+			if (record[key] != null) return String(record[key])
+		}
+		return '1 élément'
+	}
+	if (typeof value === 'boolean') return value ? 'Oui' : 'Non'
+	return String(value)
+}
+
+function rowKey(row: Record<string, any>) {
+	return row?.[nsdbModel.value.primaryKey ?? 'id'] ?? JSON.stringify(row)
 }
 </script>
 
@@ -485,9 +564,9 @@ async function handleDelete(row: any) {
 		:search="searchTerm"
 		:search-columns="effectiveSearchColumns"
 		:set-search="setSearchTerm"
-		:reload="load"
+		:refresh="load"
 	>
-		<div :class="classes.wrapper">
+		<div :class="classes.wrapper" :aria-busy="loading ? 'true' : 'false'">
 			<div :class="classes.headerWrapper">
 				<slot
 					name="header"
@@ -529,10 +608,12 @@ async function handleDelete(row: any) {
 				:filters="effectiveWhere"
 				:sort-state="sortState"
 				:set-sort="setSort"
-				:reload="load"
+				:refresh="load"
 			>
 				<div v-if="props.searchable" :class="classes.toolbar">
+					<label :for="searchInputId" class="sr-only">Rechercher dans {{ props.model }}</label>
 					<input
+						:id="searchInputId"
 						v-model="searchTerm"
 						type="search"
 						:class="classes.searchInput"
@@ -543,7 +624,7 @@ async function handleDelete(row: any) {
 			</slot>
 
 			<slot name="error" v-if="error" :error="error">
-				<div :class="classes.error">
+				<div :class="classes.error" role="alert" aria-live="polite">
 					{{ error }}
 				</div>
 			</slot>
@@ -555,7 +636,7 @@ async function handleDelete(row: any) {
 					</slot>
 				</template>
 
-				<template v-else-if="displayRows.length === 0">
+				<template v-else-if="!error && displayRows.length === 0">
 					<slot
 						name="empty"
 						:model="props.model"
@@ -568,10 +649,10 @@ async function handleDelete(row: any) {
 						:filters="effectiveWhere"
 						:search="searchTerm"
 						:search-columns="effectiveSearchColumns"
-						:reload="load"
+						:refresh="load"
 					>
 						<div :class="classes.emptyCell">
-							Aucun résultat
+							{{ emptyMessage }}
 						</div>
 					</slot>
 				</template>
@@ -581,7 +662,7 @@ async function handleDelete(row: any) {
 						<div class="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
 							<div
 								v-for="row in displayRows"
-								:key="row.id ?? JSON.stringify(row)"
+								:key="rowKey(row)"
 								class="border rounded-lg p-4 shadow-sm bg-white"
 							>
 								<slot name="card" :row="row" :columns="effectiveColumns">
@@ -595,7 +676,7 @@ async function handleDelete(row: any) {
 											{{
 												column.format
 													? column.format(getDeep(row, column.key), row)
-													: getDeep(row, column.key) ?? 'Inconnu'
+											: displayValue(getDeep(row, column.key))
 											}}
 										</span>
 									</div>
@@ -623,7 +704,7 @@ async function handleDelete(row: any) {
 									v-for="column in effectiveColumns"
 									:key="column.key"
 									:class="classes.th"
-									@click="toggleSort(column)"
+									:aria-sort="sortAriaValue(column)"
 								>
 									<slot
 										name="th"
@@ -634,11 +715,18 @@ async function handleDelete(row: any) {
 										:set-sort="setSort"
 										:toggle-sort="() => toggleSort(column)"
 									>
-										{{ column.label }}
-										<span v-if="sortState.key === column.key">
-											<span v-if="sortState.direction === 'asc'">▲</span>
-											<span v-else-if="sortState.direction === 'desc'">▼</span>
-										</span>
+										<button
+											type="button"
+											class="w-full text-left"
+											:aria-label="`Trier par ${column.label}`"
+											@click="toggleSort(column)"
+										>
+											{{ column.label }}
+											<span v-if="sortState.key === column.key" aria-hidden="true">
+												<span v-if="sortState.direction === 'asc'">▲</span>
+												<span v-else-if="sortState.direction === 'desc'">▼</span>
+											</span>
+										</button>
 									</slot>
 								</th>
 
@@ -658,7 +746,7 @@ async function handleDelete(row: any) {
 							</slot>
 						</template>
 
-						<template v-else-if="displayRows.length === 0">
+						<template v-else-if="!error && displayRows.length === 0">
 							<slot
 								name="empty"
 								:model="props.model"
@@ -671,11 +759,11 @@ async function handleDelete(row: any) {
 								:filters="effectiveWhere"
 								:search="searchTerm"
 								:search-columns="effectiveSearchColumns"
-								:reload="load"
+								:refresh="load"
 							>
 								<tr>
 									<td :colspan="effectiveColumns.length + 1" :class="classes.emptyCell">
-										Aucun résultat
+										{{ emptyMessage }}
 									</td>
 								</tr>
 							</slot>
@@ -685,7 +773,7 @@ async function handleDelete(row: any) {
 							<slot name="body" :rows="displayRows" :columns="effectiveColumns" :query="serverQuery">
 								<tr
 									v-for="row in displayRows"
-									:key="row.id ?? JSON.stringify(row)"
+									:key="rowKey(row)"
 									:class="classes.bodyRow"
 								>
 									<td
@@ -700,13 +788,13 @@ async function handleDelete(row: any) {
 											:value="
 												column.format
 													? column.format(getDeep(row, column.key), row)
-													: (getDeep(row, column.key) ?? 'Inconnu')
+											: displayValue(getDeep(row, column.key))
 											"
 										>
 											{{
 												column.format
 													? column.format(getDeep(row, column.key), row)
-													: getDeep(row, column.key) ?? 'Inconnu'
+											: displayValue(getDeep(row, column.key))
 											}}
 										</slot>
 									</td>
@@ -714,6 +802,8 @@ async function handleDelete(row: any) {
 									<td :class="classes.actionsTd">
 										<button
 											type="button"
+											aria-label="Supprimer la ligne"
+											:disabled="deletingRows.has(row?.[nsdbModel.primaryKey ?? 'id'])"
 											@click="handleDelete(row)"
 											:class="classes.deleteButton"
 										>

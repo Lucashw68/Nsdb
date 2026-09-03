@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels'
+import { useSupabaseUser } from '#imports'
+import { useNsdbModel } from '#build/nsdb/registry'
 import type { EntityRelation } from '@lucashw68/nsdb/types/entities'
 
 type Primitive = string | number | null
@@ -10,6 +11,12 @@ const props = defineProps<{
 	value: Primitive | Record<string, any> // peut être un payload d'inline-create
 	disabled?: boolean
 	placeholder?: string
+	inputId?: string
+	name?: string
+	required?: boolean
+	ariaInvalid?: boolean | 'true' | 'false' | 'grammar' | 'spelling'
+	ariaDescribedby?: string
+	store?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -28,12 +35,25 @@ const mode = ref<'select' | 'create'>('select')
 const newLabel = ref('')
 
 // DX handle sur le modèle référencé (ex: playlists, profiles…)
-const relatedModel = useNsdbModel(props.relation.referencedTable, { store: false })
+const relatedModel = computed(() =>
+	useNsdbModel(props.relation.referencedTable, { store: props.store ?? false }) as unknown as {
+		items: { value?: any[] } | any[]
+		fetch: (query?: Record<string, any>) => Promise<any[]>
+	}
+)
+const supabaseUser = useSupabaseUser()
+let loadSequence = 0
+
+function isItemsRef(value: { value?: any[] } | any[]): value is { value?: any[] } {
+	return !Array.isArray(value) && typeof value === 'object' && value !== null
+}
 
 // items : Ref<any[]>
 const rows = computed<any[]>(() => {
-	const raw = relatedModel.items
-	return Array.isArray(raw?.value) ? raw.value : (Array.isArray(raw) ? raw : [])
+	const raw = relatedModel.value.items
+	if (Array.isArray(raw)) return raw
+	if (isItemsRef(raw) && Array.isArray(raw.value)) return raw.value
+	return []
 })
 
 // valueField : clé utilisée comme valeur (id par défaut)
@@ -58,20 +78,22 @@ const options = computed(() => {
 })
 
 async function load() {
+	const requestId = ++loadSequence
 	loading.value = true
 	error.value = null
 
 	try {
-		await relatedModel.fetch({
+		await relatedModel.value.fetch({
 			limit: 200,
 			orderBy: valueField.value,
 			orderDirection: 'asc',
 		})
 	} catch (e: any) {
+		if (requestId !== loadSequence) return
 		console.error('[NsdbRelationSelect] load error:', e)
 		error.value = e?.message ?? 'Erreur de chargement des options'
 	} finally {
-		loading.value = false
+		if (requestId === loadSequence) loading.value = false
 	}
 }
 
@@ -134,7 +156,22 @@ onMounted(load)
 
 watch(
 	() => props.relation.referencedTable,
-	() => load()
+	() => {
+		mode.value = 'select'
+		newLabel.value = ''
+		void load()
+	}
+)
+
+watch(
+	() => supabaseUser.value?.id ?? null,
+	() => {
+		const raw = relatedModel.value.items
+		if (Array.isArray(raw)) raw.splice(0)
+		else if (isItemsRef(raw)) raw.value = []
+		void load()
+	},
+	{ flush: 'sync' },
 )
 </script>
 
@@ -167,11 +204,16 @@ watch(
 		<select
 			v-if="mode === 'select' || !allowInlineCreate"
 			class="border text-black rounded px-3 py-2 w-full text-sm"
+			:id="inputId"
+			:name="name"
 			:disabled="disabled || loading"
+			:required="required"
+			:aria-invalid="ariaInvalid"
+			:aria-describedby="ariaDescribedby"
 			:value="typeof value === 'object' && value !== null ? '' : (value ?? '')"
 			@change="onSelectChange"
 		>
-			<option value="">
+			<option value="" :disabled="required">
 				{{ placeholder || (loading ? 'Chargement…' : 'Sélectionner…') }}
 			</option>
 
@@ -188,8 +230,13 @@ watch(
 		<div v-else class="space-y-1">
 			<input
 				type="text"
+				:id="inputId"
+				:name="name"
 				class="border text-black rounded px-3 py-2 w-full text-sm"
 				:disabled="disabled || loading"
+				:required="required"
+				:aria-invalid="ariaInvalid"
+				:aria-describedby="ariaDescribedby"
 				:placeholder="placeholder || 'Créer un nouvel élément…'"
 				:value="newLabel"
 				@input="onCreateInput"
@@ -203,6 +250,7 @@ watch(
 		<p
 			v-if="error"
 			class="text-xs text-red-500"
+			role="alert"
 		>
 			{{ error }}
 		</p>

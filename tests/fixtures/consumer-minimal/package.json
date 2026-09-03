@@ -1,0 +1,17 @@
+{
+  "name": "nsdb-consumer-minimal",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lucashw68/nsdb": "file:__NSDB_TARBALL__",
+    "@nuxtjs/supabase": "1.6.1",
+    "@pinia/nuxt": "0.11.2",
+    "nuxt": "4.2.1",
+    "pinia": "3.0.0",
+    "vue": "3.5.24"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vue-tsc": "3.3.11"
+  }
+}

@@ -1,69 +1,35 @@
 import { useSupabaseApi } from './useSupabaseApi'
-import type { OrderDirection, WhereClause } from '@lucashw68/nsdb/types/list'
+import { useSupabaseClient, useSupabaseUser } from '#imports'
+import type { ModelHandle, ModelQuery } from '@lucashw68/nsdb/types/model'
+import type { OrderDirection } from '@lucashw68/nsdb/types/list'
 import type { Ref } from 'vue'
-import { computed, isRef, ref } from 'vue'
+import { computed, isRef, ref, watch } from 'vue'
+import { isComplexCollectionQuery, sortCollection } from '../utils/dataFreshness'
 
-export interface StoreLike<T> {
+type MutationPayload = Record<string, unknown> | Record<string, unknown>[]
+
+export interface StoreLike<T, TInsert = Partial<T>, TUpdate = Partial<T>> {
 	items: Ref<T[]> | T[]
 	totalCount?: Ref<number | null> | number | null
+	loading?: Ref<boolean> | boolean
+	error?: Ref<unknown> | unknown
+	stale?: Ref<boolean> | boolean
 	getById: (id: string | number) => T | null
-	create: (payload: Partial<T>) => Promise<T | null>
-	update: (id: string | number, payload: Partial<T>) => Promise<T | null>
+	create: (payload: TInsert) => Promise<T | null>
+	update: (id: string | number, payload: TUpdate) => Promise<T | null>
 	remove: (id: string | number) => void | Promise<void>
 	fetchFromSupabase: (query?: any) => Promise<T[]>
-	subscribeToChanges?: () => void
+	subscribe?: () => void
+	unsubscribe?: () => void | Promise<void>
+	refresh?: (query?: any) => Promise<T[]>
+	invalidate?: () => void
 }
 
-type Options<T> =
+type Options<T, TInsert, TUpdate> =
 	| boolean
-	| { store?: boolean; storeCreator?: () => StoreLike<T> }
+	| { store?: boolean; storeCreator?: () => StoreLike<T, TInsert, TUpdate>; primaryKey?: string }
 
-type ModelHandle<T> = {
-	items: Ref<T[]>
-	totalCount: Ref<number | null>
-	getById: (id: string | number, select?: string) => Promise<T | null>
-	create: (payload: Partial<T>) => Promise<T | null>
-	update: (id: string | number, payload: Partial<T>) => Promise<T | null>
-	remove: (id: string | number) => void | Promise<void>
-	fetch: (query?: ModelQuery) => Promise<T[]>
-	sync: () => void
-}
-
-/**
- * Query "haut niveau" pour les modèles (wrap sur useSupabaseApi).
- */
-export interface ModelQuery {
-	select?: string
-	where?: WhereClause
-
-	/**
-	 * Ex:
-	 * - "created_at"
-	 * - { created_at: "desc" }
-	 * - "book.title"
-	 * - { "book.title": "asc" }
-	 */
-	orderBy?: string | Record<string, OrderDirection>
-	orderDirection?: OrderDirection
-	orderForeignTable?: string
-
-	limit?: number
-	offset?: number
-
-	/**
-	 * Recherche texte (implémentée par useSupabaseApi via `.or(... ilike ...)`)
-	 */
-	search?: string
-	searchColumns?: string[]
-
-	/**
-	 * Options utilisées uniquement en mode store/cache.
-	 * En mode API direct, elles sont ignorées.
-	 */
-	force?: boolean
-	merge?: boolean
-	staleTimeMs?: number
-}
+export type { ModelHandle, ModelQuery } from '@lucashw68/nsdb/types/model'
 
 /**
  * Résultat normalisé pour l'order.
@@ -74,7 +40,7 @@ type NormalizedOrder = {
 	orderForeignTable?: string
 }
 
-function normalizeStoreItems<T>(store: StoreLike<T>): Ref<T[]> {
+function normalizeStoreItems<T>(store: { items: Ref<T[]> | T[] }): Ref<T[]> {
 	if (isRef(store.items)) return store.items
 
 	return computed({
@@ -85,7 +51,7 @@ function normalizeStoreItems<T>(store: StoreLike<T>): Ref<T[]> {
 	})
 }
 
-function normalizeStoreTotalCount<T>(store: StoreLike<T>): Ref<number | null> {
+function normalizeStoreTotalCount(store: { totalCount?: Ref<number | null> | number | null }): Ref<number | null> {
 	if (isRef(store.totalCount)) return store.totalCount
 
 	return computed({
@@ -93,6 +59,14 @@ function normalizeStoreTotalCount<T>(store: StoreLike<T>): Ref<number | null> {
 		set: (value) => {
 			;(store as any).totalCount = value
 		},
+	})
+}
+
+function normalizeStoreRef<T>(store: Record<string, any>, key: string, fallback: T): Ref<T> {
+	if (isRef(store[key])) return store[key] as Ref<T>
+	return computed({
+		get: () => (store[key] ?? fallback) as T,
+		set: value => { store[key] = value },
 	})
 }
 
@@ -112,11 +86,12 @@ function parseOrderPath(path: string): { foreignTable?: string; column: string }
 }
 
 function normalizeOrder(
-	rawOrderBy: ModelQuery['orderBy'],
+	rawOrderBy: ModelQuery<string, string>['orderBy'],
 	rawOrderDirection?: OrderDirection,
-	rawOrderForeignTable?: string
+	rawOrderForeignTable?: string,
+	defaultOrderBy: string = 'id',
 ): NormalizedOrder {
-	let orderBy = 'id'
+	let orderBy = defaultOrderBy
 	let orderDirection: OrderDirection = rawOrderDirection ?? 'asc'
 	let orderForeignTable: string | undefined = rawOrderForeignTable
 
@@ -147,13 +122,19 @@ function normalizeOrder(
 /**
  * Unified CRUD abstraction over a Supabase table.
  */
-export function useSupabaseModel<TRow>(
+export function useSupabaseModel<
+	TRow,
+	TInsert = Partial<TRow>,
+	TUpdate = Partial<TRow>,
+>(
 	modelName: string,
-	opts: Options<TRow> = false
-): ModelHandle<TRow> {
+	opts: Options<TRow, TInsert, TUpdate> = false
+): ModelHandle<TRow, TInsert, TUpdate> {
 	const useStore = typeof opts === 'boolean' ? opts : !!opts.store
 	const storeCreator =
 		typeof opts === 'object' && opts.store ? opts.storeCreator : undefined
+	const primaryKey = typeof opts === 'object' ? opts.primaryKey ?? 'id' : 'id'
+	type RowQuery = ModelQuery<string, Extract<keyof TRow, string>>
 
 	// ############################################################
 	// # STORE MODE (Pinia / offline)
@@ -169,27 +150,42 @@ export function useSupabaseModel<TRow>(
 		const noOp = () => {}
 		const storeItems = normalizeStoreItems(store)
 		const totalCount = normalizeStoreTotalCount(store)
+		const loading = normalizeStoreRef<boolean>(store as any, 'loading', false)
+		const error = normalizeStoreRef<unknown>(store as any, 'error', null)
+		const stale = normalizeStoreRef<boolean>(store as any, 'stale', true)
 
 		const getById = async (id: string | number) =>
 			(store.getById(id) as TRow | null) ?? null
-		const create = store.create as (payload: Partial<TRow>) => Promise<TRow | null>
+		const create = store.create as (payload: TInsert) => Promise<TRow | null>
 		const update = store.update as (
 			id: string | number,
-			payload: Partial<TRow>
+			payload: TUpdate
 		) => Promise<TRow | null>
-		const remove = store.remove as (id: string | number) => void | Promise<void>
-		const fetch = async (query?: ModelQuery) =>
+		const remove = store.remove as (id: string | number) => Promise<void>
+		const fetch = async (query?: RowQuery) =>
 			(await store.fetchFromSupabase(query)) as TRow[]
+		const refresh = async (query?: RowQuery) => store.refresh
+			? await store.refresh(query) as TRow[]
+			: await store.fetchFromSupabase(query) as TRow[]
+		const invalidate = store.invalidate ?? noOp
+		const subscribe = store.subscribe ?? noOp
+		const unsubscribe = store.unsubscribe ?? noOp
 
 		return {
 			items: storeItems,
 			totalCount,
+			loading,
+			error,
+			stale,
 			getById,
 			create,
 			update,
 			remove,
 			fetch,
-			sync: store.subscribeToChanges ?? noOp,
+			refresh,
+			invalidate,
+			subscribe,
+			unsubscribe,
 		}
 	}
 
@@ -197,34 +193,96 @@ export function useSupabaseModel<TRow>(
 	// # API MODE (stateless)
 	// ############################################################
 	const api = useSupabaseApi()
+	const supabase = useSupabaseClient()
+	const supabaseUser = useSupabaseUser()
 	const items = ref<TRow[]>([])
 	const typedItems = items as unknown as Ref<TRow[]>
 	const totalCount = ref<number | null>(null)
+	const loading = ref(false)
+	const error = ref<unknown>(null)
+	const stale = ref(true)
+	let fetchSequence = 0
+	let collectionRevision = 0
+	let currentQuery: RowQuery = {}
+	let subscription: ReturnType<typeof supabase.channel> | null = null
+	let subscriptionOwnerId: string | null = null
+	const normalizedCurrentQuery = () => {
+		const order = normalizeOrder(currentQuery.orderBy, currentQuery.orderDirection, currentQuery.orderForeignTable, primaryKey)
+		return { ...currentQuery, ...order }
+	}
+
+	const itemKey = (item: TRow) => (item as Record<string, unknown>)[primaryKey]
+	const addOrUpdate = (item: TRow) => {
+		const id = itemKey(item)
+		const index = typedItems.value.findIndex(candidate => itemKey(candidate) === id)
+		if (index < 0) typedItems.value = [item, ...typedItems.value]
+		else {
+			const next = [...typedItems.value]
+			next[index] = item
+			typedItems.value = next
+		}
+	}
+	const invalidate = () => {
+		collectionRevision++
+		stale.value = true
+	}
+	const mutationSucceeded = () => {
+		invalidate()
+		if (isComplexCollectionQuery(normalizedCurrentQuery())) totalCount.value = null
+	}
 
 	const getById = async (id: string | number, select: string = '*') => {
-		const response = await api.show<TRow>(modelName, id, select)
+		const response = await api.getById<TRow>(modelName, id, { key: primaryKey, select })
+		if (!response.success) throw response.error
 		return (response.data ?? null) as TRow | null
 	}
 
-	const create = async (payload: Partial<TRow>) => {
-		const response = await api.create<TRow>(modelName, payload)
-		return (response.data ?? null) as TRow | null
-	}
-
-	const update = async (id: string | number, payload: Partial<TRow>) => {
-		const response = await api.update<TRow>(modelName, id, payload)
-		if (Array.isArray(response.data)) {
-			return (response.data[0] ?? null) as TRow | null
+	const create = async (payload: TInsert) => {
+		const response = await api.create<TRow>(modelName, payload as MutationPayload)
+		if (!response.success) throw response.error
+		const created = (response.data ?? null) as TRow | null
+		if (created) {
+			mutationSucceeded()
+			const activeQuery = normalizedCurrentQuery()
+			if (!isComplexCollectionQuery(activeQuery)) {
+				addOrUpdate(created)
+				typedItems.value = sortCollection(typedItems.value as Record<string, any>[], activeQuery).slice(0, activeQuery.limit ?? 100) as TRow[]
+				if (totalCount.value != null) totalCount.value++
+			}
 		}
+		return created
+	}
 
-		return (response.data ?? null) as TRow | null
+	const update = async (id: string | number, payload: TUpdate) => {
+		const response = await api.update<TRow>(modelName, id, payload as MutationPayload, { key: primaryKey })
+		if (!response.success) throw response.error
+		const updated = (Array.isArray(response.data) ? response.data[0] : response.data) as TRow | null
+		if (updated) {
+			mutationSucceeded()
+			const activeQuery = normalizedCurrentQuery()
+			if (!isComplexCollectionQuery(activeQuery)) {
+				addOrUpdate(updated)
+				typedItems.value = sortCollection(typedItems.value as Record<string, any>[], activeQuery) as TRow[]
+			}
+		}
+		return updated ?? null
 	}
 
 	const remove = async (id: string | number) => {
-		await api.destroy(modelName, id)
+		const response = await api.remove(modelName, id, { key: primaryKey })
+		if (!response.success) throw response.error
+		const existed = typedItems.value.some(item => itemKey(item) === id)
+		mutationSucceeded()
+		typedItems.value = typedItems.value.filter(item => itemKey(item) !== id)
+		if (!isComplexCollectionQuery(normalizedCurrentQuery()) && existed && totalCount.value != null) totalCount.value--
 	}
 
-	const fetch = async (query: ModelQuery = {}) => {
+	const fetch = async (query: RowQuery = {}) => {
+		const requestId = ++fetchSequence
+		const startingRevision = collectionRevision
+		currentQuery = query
+		loading.value = true
+		error.value = null
 		const {
 			select = '*',
 			where,
@@ -237,14 +295,15 @@ export function useSupabaseModel<TRow>(
 		const { orderBy, orderDirection, orderForeignTable } = normalizeOrder(
 			query.orderBy,
 			query.orderDirection,
-			query.orderForeignTable
+			query.orderForeignTable,
+			primaryKey,
 		)
 
 		let data: TRow[] = []
 		let count: number | null = null
 
-		if (where && Object.keys(where).length > 0) {
-			const response = await api.find<TRow>(modelName, {
+		try {
+			const response = await api.all<TRow>(modelName, {
 				select,
 				where,
 				orderBy,
@@ -255,39 +314,76 @@ export function useSupabaseModel<TRow>(
 				search,
 				searchColumns,
 			})
+			if (!response.success) throw response.error
 
 			data = (response.data ?? []) as TRow[]
 			count = response.count ?? null
-		} else {
-			const response = await api.all<TRow>(modelName, {
-				select,
-				orderBy,
-				orderDirection,
-				orderForeignTable,
-				limit,
-				offset,
-				search,
-				searchColumns,
-			})
 
-			data = (response.data ?? []) as TRow[]
-			count = response.count ?? null
+		// Latest request wins: rapid search/filter changes must not let an older
+		// response overwrite the state already produced by a newer query.
+		if (requestId === fetchSequence && startingRevision === collectionRevision) {
+			typedItems.value = Array.isArray(data) ? data : []
+			totalCount.value = count ?? null
+			stale.value = false
 		}
 
-		items.value = Array.isArray(data) ? data : []
-		totalCount.value = count ?? null
-
-		return items.value as TRow[]
+		return (Array.isArray(data) ? data : []) as TRow[]
+		} catch (fetchError) {
+			error.value = fetchError
+			stale.value = true
+			throw fetchError
+		} finally {
+			if (requestId === fetchSequence) loading.value = false
+		}
 	}
+
+	const refresh = (query: RowQuery = currentQuery) => fetch(query)
+
+	const subscribe = () => {
+		if (typeof window === 'undefined' || subscription) return
+		subscriptionOwnerId = supabaseUser.value?.id ?? null
+		subscription = supabase.channel(`public:${modelName}`)
+			.on('postgres_changes', { event: '*', schema: 'public', table: modelName }, (payload: any) => {
+				if (subscriptionOwnerId !== (supabaseUser.value?.id ?? null)) return
+				invalidate()
+				if (isComplexCollectionQuery(normalizedCurrentQuery())) return
+				if (payload.eventType === 'DELETE') typedItems.value = typedItems.value.filter(item => itemKey(item) !== payload.old?.[primaryKey])
+				else if (payload.new) {
+					addOrUpdate(payload.new as TRow)
+					typedItems.value = sortCollection(typedItems.value as Record<string, any>[], normalizedCurrentQuery()) as TRow[]
+				}
+			})
+			.subscribe()
+	}
+	const unsubscribe = async () => {
+		const active = subscription
+		subscription = null
+		subscriptionOwnerId = null
+		if (!active) return
+		if (typeof (supabase as any).removeChannel === 'function') await (supabase as any).removeChannel(active)
+		else await active.unsubscribe()
+	}
+	watch(() => supabaseUser.value?.id ?? null, () => {
+		void unsubscribe()
+		typedItems.value = []
+		totalCount.value = null
+		invalidate()
+	})
 
 	return {
 		items: typedItems,
 		totalCount,
+		loading,
+		error,
+		stale,
 		getById,
 		create,
 		update,
 		remove,
 		fetch,
-		sync: () => {},
+		refresh,
+		invalidate,
+		subscribe,
+		unsubscribe,
 	}
 }

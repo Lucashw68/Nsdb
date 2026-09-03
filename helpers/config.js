@@ -19,6 +19,7 @@ export const defaultNsdbConfig = {
 	},
 	paths: {
 		types: 'types/database.types.ts',
+		metadata: 'nsdb/database.metadata.json',
 		enums: 'nsdb/enums.ts',
 		schemas: 'nsdb/schemas',
 		models: 'nsdb/models',
@@ -27,6 +28,11 @@ export const defaultNsdbConfig = {
 	},
 	imports: {
 		databaseTypes: '~~/types/database.types',
+	},
+	tables: {
+		include: [],
+		exclude: [],
+		columns: {},
 	},
 	templates: {
 		model: 'node_modules/@lucashw68/nsdb/templates/model.template.ts',

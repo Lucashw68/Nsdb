@@ -48,3 +48,17 @@ test('loadNsdbConfig supports explicit json config path', async () => {
 	assert.equal(result.config.supabase.schema, 'public')
 	assert.equal(result.config.imports.databaseTypes, '~/types/supabase')
 })
+
+test('loadNsdbConfig merges table exposure without losing defaults', async () => {
+	const projectDirectory = await createTempProject()
+	await writeFile(
+		path.join(projectDirectory, 'nsdb.config.mjs'),
+		`export default { tables: { include: ['playlists'] } }`,
+		'utf8',
+	)
+
+	const result = await loadNsdbConfig(projectDirectory)
+
+	assert.deepEqual(result.config.tables.include, ['playlists'])
+	assert.deepEqual(result.config.tables.exclude, [])
+})

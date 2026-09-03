@@ -65,7 +65,7 @@ export interface ListOptions {
 	 *   searchColumns: ['title', 'author', 'book.title']
 	 */
 	search?: string
-	searchColumns?: string[]
+	searchColumns?: readonly string[]
 }
 
 export interface WhereOperator {
@@ -76,5 +76,3 @@ export interface WhereOperator {
 export type WherePrimitive = string | number | boolean | null
 export type WhereValue = WherePrimitive | WherePrimitive[] | WhereOperator | WhereOperator[]
 export type WhereClause = Record<string, WhereValue>
-
-export interface FindOptions extends ListOptions {}

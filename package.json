@@ -1,8 +1,8 @@
 {
 	"name": "@lucashw68/nsdb",
-	"version": "0.1.96",
+	"version": "1.0.0-rc.1",
 	"type": "module",
-	"description": "A Nuxt 3 + Supabase + Pinia integration layer for unified DB access and offline storage.",
+	"description": "A typed Nuxt 4 bridge for Supabase models, optional Pinia caching and generic CRUD components.",
 	"license": "MIT",
 	"keywords": [
 		"nuxt",
@@ -27,51 +27,71 @@
 		".": "./module.ts",
 		"./useSupabaseApi": "./runtime/composables/useSupabaseApi.ts",
 		"./useSupabaseApiStorage": "./runtime/composables/useSupabaseApiStorage.ts",
-		"./useSupabaseModels": "./runtime/composables/useSupabaseModels.ts",
+		"./useSupabaseModel": "./runtime/composables/useSupabaseModels.ts",
 		"./useNsdbProfile": "./runtime/composables/useNsdbProfile.ts",
-		"./useNsdbSchemas": "./runtime/composables/useNsdbSchemas.ts",
+		"./useNsdbSchema": "./runtime/composables/useNsdbSchemas.ts",
+		"./types": "./types/index.ts",
 		"./types/config": "./types/config.ts",
 		"./types/entities": "./types/entities.ts",
 		"./types/list": "./types/list.ts",
-		"./helpers/config": "./helpers/config.js",
+		"./types/model": "./types/model.ts",
 		"./createDbStore": "./runtime/stores/createDbStore.ts",
-		"./createSingletonDbStore": "./runtime/stores/createSingletonDbStore.ts"
+		"./createSingletonStore": "./runtime/stores/createSingletonDbStore.ts"
 	},
 	"dependencies": {
+		"@nuxt/kit": "^4.0.1",
 		"@supabase/supabase-js": "^2.56.0",
+		"@types/node": "^22.0.0",
+		"postgres": "3.4.7",
 		"ts-morph": "^20.0.0",
 		"tsx": "^4.20.5"
 	},
 	"devDependencies": {
 		"@nuxt/kit": "^4.0.1",
+		"@vitejs/plugin-vue": "6.0.1",
+		"@vue/test-utils": "2.4.6",
+		"happy-dom": "18.0.1",
 		"pinia": "^3.0.3",
 		"typescript": "^5.0.0",
-		"vue": "^3.5.18"
+		"vitest": "3.2.4",
+		"vue": "3.5.24"
 	},
 	"peerDependencies": {
-		"nuxt": "^4.0.1",
-		"pinia": "^2.1.4",
-		"@pinia-plugin-persistedstate/nuxt": "^1.2.1",
-		"supabase": "^2.39.2"
+		"@nuxtjs/supabase": "^1.6.1",
+		"@pinia/nuxt": "^0.11.2",
+		"nuxt": "^4.2.1",
+		"pinia": "^3.0.0",
+		"pinia-plugin-persistedstate": "^4.5.0",
+		"vue": "^3.5.24"
+	},
+	"peerDependenciesMeta": {
+		"pinia-plugin-persistedstate": {
+			"optional": true
+		}
 	},
 	"bin": {
 		"nsdb": "./cli/index.js"
 	},
 	"scripts": {
 		"generate:types": "node ./scripts/generate-types.js",
+		"generate:metadata": "node ./scripts/generate-metadata.js",
 		"generate:enums": "node ./scripts/generate-enums.js",
 		"generate:schemas": "node ./scripts/generate-schemas.js",
 		"generate:models": "node ./scripts/generate-models.js",
 		"generate:composables": "node ./scripts/generate-composables.js",
 		"generate:stores": "node ./scripts/generate-stores.js",
-		"generate:all": "npm run generate:types && npm run generate:enums && npm run generate:schemas && npm run generate:models && npm run generate:stores && npm run generate:composables",
+		"generate:all": "npm run generate:types && npm run generate:metadata && npm run generate:enums && npm run generate:schemas && npm run generate:models && npm run generate:stores && npm run generate:models && npm run generate:composables",
 		"typecheck": "tsc --noEmit",
 		"check": "tsc --noEmit",
-		"test": "node --test \"tests/**/*.test.mjs\"",
+		"test": "npm run test:node && npm run test:runtime",
+		"test:node": "node --test \"tests/**/*.test.mjs\"",
+		"test:runtime": "vitest run",
+		"test:consumer": "node tests/fresh-consumer.mjs",
 		"prepublishOnly": "npm run check && npm test",
 		"clear": "node scripts/clear.js"
 	},
 	"files": [
+		"CHANGELOG.md",
 		"GET_STARTED.md",
 		"module.ts",
 		"runtime",

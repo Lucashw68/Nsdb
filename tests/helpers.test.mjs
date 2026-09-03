@@ -16,5 +16,8 @@ test('name helpers generate stable model and store names', () => {
 	assert.equal(toPascal('user_profiles'), 'UserProfiles')
 	assert.equal(singular('playlists'), 'playlist')
 	assert.equal(modelHookName('playlists'), 'usePlaylists')
+	assert.equal(modelHookName('profile'), 'useProfile')
+	assert.equal(modelHookName('user_profiles'), 'useUserProfiles')
+	assert.equal(modelHookName('api_keys'), 'useApiKeys')
 	assert.equal(storeName('playlists'), 'usePlaylistStore')
 })

@@ -64,7 +64,7 @@ export function useNsdbProfile<TProfile extends Record<string, any> = Record<str
 		error.value = null
 
 		try {
-			const response = await api.find<TProfile>(table, {
+			const response = await api.all<TProfile>(table, {
 				select,
 				where: {
 					[userColumn]: user.value.id,
@@ -77,7 +77,7 @@ export function useNsdbProfile<TProfile extends Record<string, any> = Record<str
 				throw response.error
 			}
 
-			profile.value = response.data[0] ?? null
+			profile.value = response.data?.[0] ?? null
 
 			if (!profile.value && createIfMissing) {
 				return await createProfile()

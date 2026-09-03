@@ -10,8 +10,10 @@ import {
 	getPublicTablesType
 } from '../helpers/ts.js'
 import { modelHookName } from '../helpers/names.js'
+import { markGenerated } from '../helpers/generated.js'
+import { selectTableProperties } from '../helpers/tables.js'
 
-async function main() {
+export async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
 	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
@@ -65,7 +67,8 @@ async function main() {
 	const importLines = []
 	const caseLines = []
 
-	for (const tableProperty of tablesType.getProperties()) {
+	const tableProperties = selectTableProperties(tablesType, config.tables)
+	for (const tableProperty of tableProperties) {
 		const tableName = tableProperty.getName()
 		const hookName = modelHookName(tableName) // ex: playlists -> usePlaylists
 
@@ -83,7 +86,7 @@ async function main() {
 			.replace('// __IMPORTS__', importLines.join('\n'))
 			.replace('// __CASES__', caseLines.join('\n')) + '\n'
 
-	writeText(outputFilePath, finalContent)
+	writeText(outputFilePath, markGenerated(finalContent))
 	console.log('✅ useNsdbModels:', path.relative(currentWorkingDirectory, outputFilePath))
 }
 

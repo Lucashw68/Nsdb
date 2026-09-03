@@ -10,6 +10,10 @@ import {
 	getPublicTablesType
 } from '../helpers/ts.js'
 import { toPascal } from '../helpers/names.js'
+import { markGenerated, removeStaleGeneratedFiles } from '../helpers/generated.js'
+import { getColumnPolicies, selectTableProperties } from '../helpers/tables.js'
+import { getTableMetadata, loadDatabaseMetadata } from '../helpers/metadata.js'
+import { buildRelationCatalog } from '../helpers/relations.js'
 
 /**
  * Ancien helper (conservé au cas où tu en aurais besoin plus tard).
@@ -47,7 +51,15 @@ function guessFieldKindFromTypeText(typeText) {
  * ('text' | 'number' | 'checkbox' | 'datetime' | 'textarea' | ...).
  * Les enums seront forcés plus bas à 'select'.
  */
-function guessFieldTypeForUi(typeText) {
+function guessFieldTypeForUi(typeText, columnMetadata = null) {
+	const databaseType = String(columnMetadata?.dataType ?? '').toLowerCase()
+	if (databaseType.endsWith('[]')) return 'array'
+	if (databaseType === 'json' || databaseType === 'jsonb') return 'json'
+	if (databaseType === 'date') return 'date'
+	if (databaseType.includes('timestamp')) return 'datetime'
+	if (databaseType.includes('bool')) return 'checkbox'
+	if (/^(smallint|integer|bigint|numeric|decimal|real|double precision)/.test(databaseType)) return 'number'
+
 	const normalized = String(typeText || '').toLowerCase()
 
 	if (normalized.includes('bool')) return 'checkbox'
@@ -62,7 +74,8 @@ function guessFieldTypeForUi(typeText) {
 	if (normalized.includes('timestamp') || normalized.includes('date')) {
 		return 'datetime'
 	}
-	if (normalized.includes('json')) return 'textarea'
+	if (normalized.includes('json')) return 'json'
+	if (normalized.includes('[]')) return 'array'
 	// Pour le reste, on part sur du 'text' par défaut
 	return 'text'
 }
@@ -73,6 +86,17 @@ function extractEnumNameFromTypeText(typeText) {
 		.match(/Database\["public"\]\["Enums"\]\["([^"]+)"\]/)
 
 	return enumMatch?.[1] ?? null
+}
+
+function extractLiteralOptions(typeText) {
+	return [...String(typeText || '').matchAll(/["']([^"']+)["']/g)]
+		.map(match => match[1])
+		.filter((value, index, values) => values.indexOf(value) === index)
+}
+
+function humanizeIdentifier(identifier) {
+	const words = String(identifier).replace(/_/g, ' ').trim()
+	return words ? `${words[0].toUpperCase()}${words.slice(1)}` : identifier
 }
 
 function isFieldRequired(insertType, fieldName) {
@@ -163,7 +187,7 @@ function getRelationshipsForTable(tableType, locationNode) {
 	})
 }
 
-function buildSchemaForTable(tableProperty, locationNode) {
+function buildSchemaForTable(tableProperty, locationNode, exposedTableNames, config, databaseMetadata, tableRelations) {
 	const tableName = tableProperty.getName()
 	const pascalTableName = toPascal(tableName)
 	const rowTypeAliasName = `${pascalTableName}Row`
@@ -171,37 +195,50 @@ function buildSchemaForTable(tableProperty, locationNode) {
 	const tableType = tableProperty.getTypeAtLocation(locationNode)
 	const rowProperty = tableType.getProperty('Row')
 	const insertProperty = tableType.getProperty('Insert')
+	const updateProperty = tableType.getProperty('Update')
 
-	if (!rowProperty || !insertProperty) return null
+	if (!rowProperty || !insertProperty || !updateProperty) return null
 
 	const rowType = rowProperty.getTypeAtLocation(locationNode)
 	const insertType = insertProperty.getTypeAtLocation(locationNode)
+	const updateType = updateProperty.getTypeAtLocation(locationNode)
 
 	// 🔥 On lit les relations pour cette table
-	const relationships = getRelationshipsForTable(tableType, locationNode)
+	const tableMetadata = getTableMetadata(databaseMetadata, tableName)
+	const relationships = (tableMetadata?.relationships ?? getRelationshipsForTable(tableType, locationNode))
+		.filter(relation => exposedTableNames.has(relation.referencedRelation))
 	console.log(`🔍 Table "${tableName}" - found ${relationships.length} relationships.`)
 
 	// Map: nom de colonne locale -> descriptor de relation
 	const relationByColumn = new Map()
 	for (const rel of relationships) {
+		if (rel.columns.length !== 1) continue
 		for (const col of rel.columns) {
 			relationByColumn.set(col, rel)
 		}
 	}
 
 	const fieldLines = []
+	const rowFields = rowType.getProperties()
+	const columnPolicies = getColumnPolicies(config.tables, tableName, rowFields.map(field => field.getName()))
 
-	for (const rowField of rowType.getProperties()) {
+	for (const rowField of rowFields) {
 		const fieldName = rowField.getName()
+		const columnMetadata = tableMetadata?.columns?.[fieldName] ?? null
+		const columnPolicy = columnPolicies[fieldName]
+		if (columnPolicy.serverOnly) continue
 		const fieldType = rowField.getTypeAtLocation(locationNode)
 		const rowFieldTypeText = fieldType.getText()
+		const fallbackNullable = /(^|\s)null(\s|$)/.test(rowFieldTypeText.replace(/\|/g, ' '))
 
 		const insertPropertySymbol = insertType.getProperty(fieldName)
 		const insertFieldTypeText = insertPropertySymbol
 			?.getTypeAtLocation(locationNode)
 			.getText()
 
-		const fieldIsRequired = isFieldRequired(insertType, fieldName)
+		const fieldIsRequired = columnMetadata
+			? Boolean(columnMetadata.insertable && !columnMetadata.nullable && !columnMetadata.hasDefault)
+			: isFieldRequired(insertType, fieldName)
 
 		// Texte du type tel qu'il est écrit dans Insert
 		// => ex: Database["public"]["Enums"]["PROVIDERS"] | null
@@ -211,10 +248,12 @@ function buildSchemaForTable(tableProperty, locationNode) {
 		)
 
 		const enumName = extractEnumNameFromTypeText(insertRawTypeReferenceText)
+		const literalOptions = enumName ? [] : extractLiteralOptions(insertRawTypeReferenceText)
 
 		// Type UI par défaut (FieldType)
 		let uiFieldType = guessFieldTypeForUi(
-			insertFieldTypeText || rowFieldTypeText
+			insertFieldTypeText || rowFieldTypeText,
+			columnMetadata,
 		)
 
 		// Si on a trouvé un enum sur Insert, on force le type à 'select'
@@ -224,10 +263,25 @@ function buildSchemaForTable(tableProperty, locationNode) {
 			optionsAttachment =
 				`, options: Enums.${toPascal(enumName)}Values.map(v => ({ label: String(v), value: v }))`
 		}
+		else if (literalOptions.length > 1) {
+			uiFieldType = 'select'
+			optionsAttachment = `, options: ${JSON.stringify(literalOptions)}.map(v => ({ label: String(v), value: v }))`
+		}
 
-		const isPrimaryKey = fieldName === 'id'
-		const isReadOnlyField =
-			isPrimaryKey || ['created_at', 'updated_at', 'inserted_at'].includes(fieldName)
+		const isPrimaryKey = columnMetadata
+			? Boolean(columnMetadata.primaryKey)
+			: fieldName === 'id'
+		const policyAllowsEditing = columnPolicy.editable !== false
+		const isConventionallyReadonly = isPrimaryKey || ['created_at', 'updated_at', 'inserted_at'].includes(fieldName)
+		const isInsertable = policyAllowsEditing && (columnMetadata
+			? Boolean(columnMetadata.insertable)
+			: Boolean(insertType.getProperty(fieldName)) && !isConventionallyReadonly)
+		const isUpdatable = policyAllowsEditing && (columnMetadata
+			? Boolean(columnMetadata.updatable)
+			: Boolean(updateType.getProperty(fieldName)) && !isConventionallyReadonly)
+		const isEditable = isInsertable || isUpdatable
+		const isReadOnlyField = !isEditable
+		const fallbackHasDefault = !columnMetadata && isInsertable && !fieldIsRequired && !fallbackNullable
 
 		// 🔗 Relation éventuelle pour ce champ
 		const relationDescriptor = relationByColumn.get(fieldName)
@@ -236,34 +290,49 @@ function buildSchemaForTable(tableProperty, locationNode) {
 		if (relationDescriptor) {
 			// kind simple: si isOneToOne => 'hasOne', sinon 'belongsTo'
 			const kind = relationDescriptor.isOneToOne ? 'hasOne' : 'belongsTo'
+			const catalogRelation = tableRelations.find(
+				relation => relation.foreignKeyName === relationDescriptor.foreignKeyName && relation.direction === 'forward',
+			)
 
 			uiFieldType = 'relation' // on force le type UI pour les FK
 
 			relationAttachment =
 				`, relation: {` +
+				` alias: '${catalogRelation?.alias ?? relationDescriptor.referencedRelation}',` +
 				` kind: '${kind}',` +
+				` direction: '${catalogRelation?.direction ?? 'forward'}',` +
 				` referencedTable: '${relationDescriptor.referencedRelation}',` +
+				` embedResource: '${catalogRelation?.embedResource ?? relationDescriptor.referencedRelation}',` +
 				` localColumns: [${relationDescriptor.columns.map((c) => `'${c}'`).join(', ')}],` +
 				` referencedColumns: [${relationDescriptor.referencedColumns
 					.map((c) => `'${c}'`)
 					.join(', ')}],` +
-				` foreignKeyName: '${relationDescriptor.foreignKeyName}'` +
+				` foreignKeyName: '${relationDescriptor.foreignKeyName}',` +
+				` nullable: ${catalogRelation?.nullable ?? false},` +
+				` composite: ${catalogRelation?.composite ?? false}` +
 				` }`
 		}
 
 		fieldLines.push(
 			`\t${fieldName}: {` +
-				` label: '${fieldName}',` +
+				` label: '${humanizeIdentifier(fieldName)}',` +
 				` type: '${uiFieldType}',` +
 				` required: ${fieldIsRequired}` +
+				`, selectable: ${columnPolicy.selectable}` +
+				`, editable: ${isEditable}` +
+				`, insertable: ${isInsertable}` +
+				`, updatable: ${isUpdatable}` +
+				`${columnPolicy.hidden ? ', hidden: true' : ''}` +
 				`${isReadOnlyField ? ', readonly: true' : ''}` +
+				`${isPrimaryKey ? ', primaryKey: true' : ''}` +
+				`${columnMetadata ? `, nullable: ${columnMetadata.nullable}, hasDefault: ${columnMetadata.hasDefault}, databaseType: ${JSON.stringify(columnMetadata.dataType)}, defaultExpression: ${JSON.stringify(columnMetadata.defaultExpression)}` : `, nullable: ${fallbackNullable}, hasDefault: ${fallbackHasDefault}`}` +
 				`${optionsAttachment}` +
 				`${relationAttachment}` +
 			` },`
 		)
 	}
 
-	return { tableName, pascalTableName, rowTypeAliasName, fieldLines }
+	return { tableName, pascalTableName, rowTypeAliasName, fieldLines, relations: tableRelations }
 }
 
 function renderTemplate(templateContent, descriptor) {
@@ -271,10 +340,11 @@ function renderTemplate(templateContent, descriptor) {
 		.replace(/__TABLE__/g, descriptor.tableName)
 		.replace(/__PASCAL__/g, descriptor.pascalTableName)
 		.replace(/__ROW__/g, descriptor.rowTypeAliasName)
+		.replace('__RELATIONS__', JSON.stringify(descriptor.relations, null, 2))
 		.replace('// __FIELDS__', descriptor.fieldLines.join('\n'))
 }
 
-async function main() {
+export async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
 	const { config } = await loadNsdbConfig(currentWorkingDirectory, parsedArguments.get('config', ''))
@@ -325,10 +395,23 @@ async function main() {
 	}
 
 	const templateContent = readText(templateFilePath)
+	const databaseMetadata = loadDatabaseMetadata(currentWorkingDirectory, config)
 	const exportStatements = []
+	const generatedFileNames = []
 
-	for (const tableProperty of tablesType.getProperties()) {
-		const schemaDescriptor = buildSchemaForTable(tableProperty, databaseAlias)
+	const tableProperties = selectTableProperties(tablesType, config.tables)
+	const exposedTableNames = new Set(tableProperties.map(tableProperty => tableProperty.getName()))
+	const relationCatalog = buildRelationCatalog(databaseMetadata, exposedTableNames)
+	for (const tableProperty of tableProperties) {
+		const tableName = tableProperty.getName()
+		const schemaDescriptor = buildSchemaForTable(
+			tableProperty,
+			databaseAlias,
+			exposedTableNames,
+			config,
+			databaseMetadata,
+			relationCatalog[tableName] ?? [],
+		)
 		if (!schemaDescriptor || !schemaDescriptor.fieldLines.length) continue
 
 		const fileContent = renderTemplate(templateContent, schemaDescriptor)
@@ -337,15 +420,17 @@ async function main() {
 			`${schemaDescriptor.tableName}.ts`
 		)
 
-		writeText(schemaFilePath, fileContent)
+		writeText(schemaFilePath, markGenerated(fileContent))
 		console.log('✅ schema:', path.relative(currentWorkingDirectory, schemaFilePath))
 
 		exportStatements.push(
 			`export * from './${schemaDescriptor.tableName}' // ${schemaDescriptor.pascalTableName}Schema`
 		)
+		generatedFileNames.push(`${schemaDescriptor.tableName}.ts`)
 	}
 
-	writeText(barrelFilePath, exportStatements.join('\n') + '\n')
+	writeText(barrelFilePath, markGenerated(exportStatements.join('\n') + '\n'))
+	removeStaleGeneratedFiles(outputDirectory, ['index.ts', ...generatedFileNames])
 	console.log('✅ schemas barrel:', path.relative(currentWorkingDirectory, barrelFilePath))
 }
 

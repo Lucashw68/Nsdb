@@ -19,6 +19,7 @@ export default {
 	},
 	paths: {
 		types: 'types/database.types.ts',
+		metadata: 'nsdb/database.metadata.json',
 		enums: 'nsdb/enums.ts',
 		schemas: 'nsdb/schemas',
 		models: 'nsdb/models',
@@ -27,5 +28,15 @@ export default {
 	},
 	imports: {
 		databaseTypes: '~~/types/database.types',
+	},
+	tables: {
+		// Prefer an allowlist for browser-facing artifacts.
+		include: ['playlists'],
+		columns: {
+			playlists: {
+				internal_note: { serverOnly: true },
+				created_at: { editable: false },
+			},
+		},
 	},
 } satisfies NsdbConfig

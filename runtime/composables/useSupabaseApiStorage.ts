@@ -1,5 +1,22 @@
 import { useSupabaseClient } from '#imports'
 import type { OrderDirection } from '@lucashw68/nsdb/types/list'
+import {
+	applySearchFilter,
+	joinPath,
+	normalizeBucketName,
+	normalizeDirectoryPath,
+	normalizeFilePath,
+	normalizePath,
+} from '../utils/storage'
+
+export {
+	applySearchFilter,
+	joinPath,
+	normalizeBucketName,
+	normalizeDirectoryPath,
+	normalizeFilePath,
+	normalizePath,
+} from '../utils/storage'
 
 export type StorageFileBody = File | Blob | ArrayBuffer | ArrayBufferView | FormData | string
 
@@ -78,42 +95,6 @@ const DEFAULT_LIST_OPTIONS: Required<Pick<StorageListOptions, 'path' | 'limit' |
 	orderDirection: 'asc',
 }
 
-function normalizePath(path = '') {
-	return path
-		.split('/')
-		.map(part => part.trim())
-		.filter(Boolean)
-		.join('/')
-}
-
-function normalizeDirectoryPath(path = '') {
-	return normalizePath(path)
-}
-
-function normalizeFilePath(path: string) {
-	const normalizedPath = normalizePath(path)
-
-	if (!normalizedPath) {
-		throw new Error('[nsdb:storage] A file path is required.')
-	}
-
-	return normalizedPath
-}
-
-function joinPath(...parts: Array<string | number | null | undefined>) {
-	return parts
-		.map(part => normalizePath(String(part ?? '')))
-		.filter(Boolean)
-		.join('/')
-}
-
-function applySearchFilter<T extends { name?: string }>(items: T[], search?: string) {
-	const normalizedSearch = search?.trim().toLowerCase()
-	if (!normalizedSearch) return items
-
-	return items.filter(item => item.name?.toLowerCase().includes(normalizedSearch))
-}
-
 function handleStorageResponse<T>(
 	payload: { data: T | null; error: unknown },
 	context: string,
@@ -153,11 +134,7 @@ export const useSupabaseApiStorage = () => {
 	}
 
 	function bucket(bucketName: string) {
-		if (!bucketName.trim()) {
-			throw new Error('[nsdb:storage] A bucket name is required.')
-		}
-
-		return supabaseClient.storage.from(bucketName)
+		return supabaseClient.storage.from(normalizeBucketName(bucketName))
 	}
 
 	/**
@@ -306,28 +283,33 @@ export const useSupabaseApiStorage = () => {
 	}
 
 	async function getBucket<T = any>(bucketName: string) {
-		const { data, error } = await supabaseClient.storage.getBucket(bucketName)
-		return handleStorageResponse<T>({ data: data as T | null, error }, `GET_BUCKET ${bucketName}`, null as T)
+		const normalizedBucketName = normalizeBucketName(bucketName)
+		const { data, error } = await supabaseClient.storage.getBucket(normalizedBucketName)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `GET_BUCKET ${normalizedBucketName}`, null as T)
 	}
 
 	async function createBucket<T = any>(bucketName: string, options: StorageCreateBucketOptions = {}) {
-		const { data, error } = await supabaseClient.storage.createBucket(bucketName, normalizeBucketOptions(options))
-		return handleStorageResponse<T>({ data: data as T | null, error }, `CREATE_BUCKET ${bucketName}`, null as T)
+		const normalizedBucketName = normalizeBucketName(bucketName)
+		const { data, error } = await supabaseClient.storage.createBucket(normalizedBucketName, normalizeBucketOptions(options))
+		return handleStorageResponse<T>({ data: data as T | null, error }, `CREATE_BUCKET ${normalizedBucketName}`, null as T)
 	}
 
 	async function updateBucket<T = any>(bucketName: string, options: StorageCreateBucketOptions) {
-		const { data, error } = await supabaseClient.storage.updateBucket(bucketName, normalizeBucketOptions(options))
-		return handleStorageResponse<T>({ data: data as T | null, error }, `UPDATE_BUCKET ${bucketName}`, null as T)
+		const normalizedBucketName = normalizeBucketName(bucketName)
+		const { data, error } = await supabaseClient.storage.updateBucket(normalizedBucketName, normalizeBucketOptions(options))
+		return handleStorageResponse<T>({ data: data as T | null, error }, `UPDATE_BUCKET ${normalizedBucketName}`, null as T)
 	}
 
 	async function deleteBucket<T = any>(bucketName: string) {
-		const { data, error } = await supabaseClient.storage.deleteBucket(bucketName)
-		return handleStorageResponse<T>({ data: data as T | null, error }, `DELETE_BUCKET ${bucketName}`, null as T)
+		const normalizedBucketName = normalizeBucketName(bucketName)
+		const { data, error } = await supabaseClient.storage.deleteBucket(normalizedBucketName)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `DELETE_BUCKET ${normalizedBucketName}`, null as T)
 	}
 
 	async function emptyBucket<T = any>(bucketName: string) {
-		const { data, error } = await supabaseClient.storage.emptyBucket(bucketName)
-		return handleStorageResponse<T>({ data: data as T | null, error }, `EMPTY_BUCKET ${bucketName}`, null as T)
+		const normalizedBucketName = normalizeBucketName(bucketName)
+		const { data, error } = await supabaseClient.storage.emptyBucket(normalizedBucketName)
+		return handleStorageResponse<T>({ data: data as T | null, error }, `EMPTY_BUCKET ${normalizedBucketName}`, null as T)
 	}
 
 	return {

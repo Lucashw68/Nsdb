@@ -1,44 +1,64 @@
 #!/usr/bin/env node
-import path from 'path'
+import path from 'node:path'
 import { parseArgs } from '../helpers/args.js'
-import { removeDirIfExists, removeFileIfExists, listFiles } from '../helpers/io.js'
+import { loadNsdbConfig } from '../helpers/config.js'
+import {
+	isNsdbGeneratedFile,
+	listGeneratedFiles,
+	removeGeneratedFile,
+} from '../helpers/generated.js'
 
-function main() {
-	const { getBool } = parseArgs()
-	const verboseOutput = getBool('verbose', false)
-	const shouldDeleteStores = !getBool('no-stores', false)
+function configuredTargets(currentWorkingDirectory, config, shouldDeleteStores) {
+	const fileTargets = [config.paths.enums]
+	const directoryTargets = [
+		config.paths.schemas,
+		config.paths.models,
+		config.paths.composables,
+	]
 
-	const currentWorkingDirectory = process.cwd()
-	const nsdbDirectoryPath = path.resolve(currentWorkingDirectory, 'nsdb')
-	const storesDirectoryPath = path.resolve(currentWorkingDirectory, 'stores')
-	const legacyModelsFilePath = path.resolve(nsdbDirectoryPath, 'models.ts')
+	if (shouldDeleteStores) directoryTargets.push(config.paths.stores)
 
-	let removedAnyFile = false
-	const deletedStoreFiles = []
-
-	removedAnyFile = removeDirIfExists(nsdbDirectoryPath, verboseOutput) || removedAnyFile
-	removedAnyFile = removeFileIfExists(legacyModelsFilePath, verboseOutput) || removedAnyFile
-
-	if (shouldDeleteStores) {
-		for (const fileName of listFiles(storesDirectoryPath)) {
-			if (fileName.startsWith('use') && fileName.endsWith('Store.ts')) {
-				const storeFilePath = path.join(storesDirectoryPath, fileName)
-				if (removeFileIfExists(storeFilePath, verboseOutput)) {
-					deletedStoreFiles.push(fileName)
-					removedAnyFile = true
-				}
-			}
-		}
-	}
-
-	if (removedAnyFile) {
-		console.log('✅ Cleanup completed.')
-		if (deletedStoreFiles.length && !verboseOutput) {
-			console.log(`🗑️  Removed ${deletedStoreFiles.length} generated store file(s).`)
-		}
-	} else {
-		console.log('✅ Nothing to clean, generated files already removed.')
+	return {
+		fileTargets: fileTargets.map(target => path.resolve(currentWorkingDirectory, target)),
+		directoryTargets: [...new Set(directoryTargets.map(target => path.resolve(currentWorkingDirectory, target)))],
 	}
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main()
+export async function clearGeneratedFiles({
+	currentWorkingDirectory = process.cwd(),
+	parsedArguments = parseArgs(),
+} = {}) {
+	const verbose = parsedArguments.getBool('verbose', false)
+	const dryRun = parsedArguments.getBool('dry-run', false)
+	const shouldDeleteStores = !parsedArguments.getBool('no-stores', false)
+	const { config } = await loadNsdbConfig(
+		currentWorkingDirectory,
+		parsedArguments.get('config', ''),
+	)
+	const targets = configuredTargets(currentWorkingDirectory, config, shouldDeleteStores)
+	const candidates = [
+		...targets.fileTargets.filter(isNsdbGeneratedFile),
+		...targets.directoryTargets.flatMap(listGeneratedFiles),
+	]
+	const uniqueCandidates = [...new Set(candidates)]
+
+	for (const filePath of uniqueCandidates) {
+		removeGeneratedFile(filePath, { dryRun, verbose })
+	}
+
+	if (dryRun) {
+		console.log(`Cleanup preview: ${uniqueCandidates.length} generated file(s) would be removed.`)
+	} else {
+		console.log(`Cleanup completed: ${uniqueCandidates.length} generated file(s) removed.`)
+	}
+
+	return uniqueCandidates
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+	clearGeneratedFiles().catch((error) => {
+		console.error('Failed to clear NSDB generated files.')
+		console.error(error)
+		process.exit(1)
+	})
+}

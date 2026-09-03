@@ -75,6 +75,7 @@ export default defineNuxtConfig({
 		withComponents: true,
 		componentsPrefix: 'Nsdb',
 		withStores: true,
+		autoImportModels: true,
 	},
 
 	supabase: {
@@ -213,6 +214,7 @@ export default {
 	},
 	paths: {
 		types: 'types/database.types.ts',
+		metadata: 'nsdb/database.metadata.json',
 		enums: 'nsdb/enums.ts',
 		schemas: 'nsdb/schemas',
 		models: 'nsdb/models',
@@ -222,8 +224,22 @@ export default {
 	imports: {
 		databaseTypes: '~~/types/database.types',
 	},
+	tables: {
+		include: ['playlists', 'tracks'],
+		columns: {
+			playlists: {
+				internal_note: { serverOnly: true },
+				created_at: { editable: false },
+				cover_url: { hidden: true },
+			},
+		},
+	},
 } satisfies NsdbConfig
 ```
+
+Avec `supabase.dbUrl` ou `SUPABASE_DB_URL`, `generate:all` interroge aussi `pg_catalog` afin de détecter exactement clés primaires, contraintes, valeurs par défaut, nullabilité, identités et colonnes générées. Sans accès PostgreSQL direct, cette étape est ignorée avec un avertissement et la génération utilise le fallback TypeScript moins précis.
+
+`serverOnly` retire la colonne des artefacts client NSDB, mais ne remplace jamais RLS. En cas de collision entre un composable applicatif et un modèle généré (par exemple deux `usePlaylists`), Nuxt échoue explicitement. Configurez `autoImportModels: false` puis importez le modèle généré explicitement.
 
 Si le projet Supabase est lié localement :
 
@@ -440,7 +456,7 @@ Exemple avec `playlists` :
 
 ```vue
 <script setup lang="ts">
-const playlists = usePlaylistsModel()
+const playlists = usePlaylists()
 
 await playlists.fetch({
 	orderBy: 'created_at',
@@ -465,14 +481,26 @@ API principale d'un modèle :
 ```ts
 items
 totalCount
+loading
+error
+stale
+createDraft
 fetch
-find
+refresh
+invalidate
 getById
 create
 update
 remove
-sync
+subscribe
+unsubscribe
 ```
+
+`fetch()` réutilise un résultat encore frais uniquement en mode store. `refresh()`
+interroge toujours Supabase. `invalidate()` conserve les lignes sûres à l'écran,
+mais les marque périmées. Les anciens `sync()`, `find()`, `new()` et
+`fetch({ force: true })` ont été retirés dans la release candidate. Utilisez
+respectivement `subscribe()`, `fetch({ where })`, `createDraft()` et `refresh()`.
 
 ---
 
@@ -581,6 +609,29 @@ await playlistsStore.create({
 ```
 
 Les stores générés sont vidés automatiquement quand l'utilisateur Supabase change.
+Deux appels `usePlaylists({ store: true })` partagent la même collection : une
+création, modification ou suppression confirmée par Supabase est donc visible par
+tous les consommateurs sans `refresh()` supplémentaire.
+
+```ts
+const playlists = usePlaylists({ store: true })
+
+await playlists.fetch()       // cache exact tant que le TTL est valide
+await playlists.refresh()     // réseau immédiatement
+playlists.invalidate()        // conserve items, stale devient true
+
+playlists.subscribe()         // Realtime opt-in, côté client uniquement
+await playlists.unsubscribe()
+```
+
+Les vues filtrées, décalées ou contenant des relations sont invalidées après un
+événement ambigu au lieu d'être réévaluées approximativement dans le navigateur.
+Pour une dépendance métier entre deux tables, invalidez-la explicitement :
+
+```ts
+await playlists.create({ title: 'Nouvelle playlist' })
+tracks.invalidate()
+```
 
 Pour un store public non lié à l'utilisateur :
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
-import { useNsdbModel } from '~~/nsdb/composables/useNsdbModels'
+import { ref, watch, computed, nextTick, useId } from 'vue'
+import { useSupabaseUser } from '#imports'
+import { useNsdbModel } from '#build/nsdb/registry'
 import NsdbRelationSelect from './Form/NsdbRelationSelect.vue'
 import type { EntityRelation } from '@lucashw68/nsdb/types/entities'
 
@@ -14,7 +15,7 @@ type Label = {
 type NsdbFormModel = {
 	items?: unknown
 	schema: Record<string, any>
-	new?: () => Record<string, any>
+	createDraft?: () => Record<string, any>
 	getById?: (id: string | number) => Promise<Record<string, any> | null>
 	create?: (payload: Record<string, any>) => Promise<any>
 	update?: (id: string | number, payload: Record<string, any>) => Promise<any>
@@ -27,6 +28,11 @@ const props = defineProps<{
 	initialValues?: Record<string, any>
 	labels?: Label[]
 	hideFields?: string[]
+	store?: boolean
+	validate?: (
+		values: Readonly<Record<string, any>>,
+		context: { mode: NsdbFormMode; model: string },
+	) => Record<string, string | string[]> | null | undefined | Promise<Record<string, string | string[]> | null | undefined>
 }>()
 
 const emit = defineEmits<{
@@ -37,30 +43,35 @@ const emit = defineEmits<{
 }>()
 
 // DX handle générique (playlists, songs, etc.)
-const nsdbModel = useNsdbModel(props.model, { store: false }) as NsdbFormModel
-const nsdbSchema = nsdbModel.schema as Record<string, any>
+// The registry returns a table-specific Insert/Update contract. The generic form
+// intentionally erases that table parameter only at this UI boundary.
+const nsdbModel = computed(() =>
+	useNsdbModel(props.model, { store: props.store ?? false }) as unknown as NsdbFormModel
+)
+const nsdbSchema = computed<Record<string, any>>(() => nsdbModel.value.schema ?? {})
+const supabaseUser = useSupabaseUser()
 
 // ------------------------
 // Modèles liés (belongsTo)
 // ------------------------
 
-const relatedModels: Record<string, NsdbFormModel> = {}
-
-if (nsdbSchema && typeof nsdbSchema === 'object') {
-	for (const def of Object.values(nsdbSchema as Record<string, any>)) {
+const relatedModels = computed<Record<string, NsdbFormModel>>(() => {
+	const models: Record<string, NsdbFormModel> = {}
+	for (const def of Object.values(nsdbSchema.value)) {
 		if (def?.type === 'relation' && def.relation && def.relation.kind === 'belongsTo') {
 			const relation = def.relation as EntityRelation
 			const table = relation.referencedTable
-			if (!relatedModels[table]) {
+			if (!models[table]) {
 				try {
-					relatedModels[table] = useNsdbModel(table, { store: false }) as NsdbFormModel
+					models[table] = useNsdbModel(table, { store: props.store ?? false }) as unknown as NsdbFormModel
 				} catch (e) {
 					console.warn('[NsdbForm] Impossible d’initialiser le modèle lié pour', table, e)
 				}
 			}
 		}
 	}
-}
+	return models
+})
 
 function splitInitialValuesByRelation(
 	initialValues: Record<string, any> | undefined,
@@ -122,7 +133,7 @@ function splitInitialValuesByRelation(
 }
 
 const parsedInitialValues = computed(() =>
-	splitInitialValuesByRelation(props.initialValues ?? {}, nsdbSchema as Record<string, any>)
+	splitInitialValuesByRelation(props.initialValues ?? {}, nsdbSchema.value)
 )
 
 const rootInitialValues = computed(
@@ -140,26 +151,41 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const fieldErrors = ref<Record<string, string[]>>({})
 const form = ref<Record<string, any>>({})
+const formElement = ref<HTMLFormElement | null>(null)
+const formUid = useId().replace(/[^a-zA-Z0-9_-]/g, '')
+const status = ref<'idle' | 'loading' | 'saving' | 'saved' | 'error'>('idle')
+const baseline = ref('{}')
+let loadSequence = 0
 
-const hiddenFieldsSet = computed(() => new Set(props.hideFields ?? []))
+const dirty = computed(() => JSON.stringify(form.value) !== baseline.value)
+
+const hiddenFieldsSet = computed(() => new Set([
+	...(props.hideFields ?? []),
+	...Object.entries(nsdbSchema.value)
+		.filter(([, definition]) => definition?.hidden || definition?.serverOnly)
+		.map(([key]) => key),
+]))
 
 function initForm() {
-	const base = typeof nsdbModel.new === 'function' ? nsdbModel.new() : {}
+	const base = typeof nsdbModel.value.createDraft === 'function'
+		? nsdbModel.value.createDraft()
+		: {}
 
 	form.value = {
 		...base,
 		...(rootInitialValues.value || {}),
 	}
+	baseline.value = JSON.stringify(form.value)
 }
 
 /**
  * Champs cachés + required => doivent être présents dans initialValues
  */
 const missingRequiredHiddenFields = computed<string[]>(() => {
-	if (!nsdbSchema || !props.hideFields?.length) return []
+	if (!hiddenFieldsSet.value.size) return []
 
-	return props.hideFields.filter((field: string) => {
-		const def = nsdbSchema[field]
+	return [...hiddenFieldsSet.value].filter((field: string) => {
+		const def = nsdbSchema.value[field]
 		if (!def || !def.required) return false
 
 		// doit exister dans initialValues
@@ -184,6 +210,13 @@ watch(
  * Chargement de l'entité existante en mode "edit"
  */
 async function load() {
+	const requestId = ++loadSequence
+	// Never render values or errors belonging to the previous model/item.
+	form.value = {}
+	fieldErrors.value = {}
+	error.value = null
+	loading.value = false
+	status.value = mode.value === 'edit' ? 'loading' : 'idle'
 	if (mode.value === 'create') {
 		initForm()
 		return
@@ -195,36 +228,48 @@ async function load() {
 	}
 
 	loading.value = true
-	error.value = null
 
 	try {
 		let existing: any = null
 
-		if (typeof nsdbModel.getById === 'function') {
-			existing = await nsdbModel.getById(props.id)
+		if (typeof nsdbModel.value.getById === 'function') {
+			existing = await nsdbModel.value.getById(props.id)
 		}
+		if (requestId !== loadSequence) return
 
 		if (!existing) {
 			error.value = 'Élément introuvable'
 			form.value = {}
 		} else {
 			form.value = { ...existing }
+			baseline.value = JSON.stringify(form.value)
 		}
 	} catch (e: any) {
+		if (requestId !== loadSequence) return
 		error.value = e?.message ?? 'Erreur de chargement'
+		status.value = 'error'
 		emit('error', e)
 	} finally {
-		loading.value = false
+		if (requestId === loadSequence) {
+			loading.value = false
+			if (!error.value) status.value = 'idle'
+		}
 	}
 }
 
 // (Re)init quand id / initialValues / schema changent
 watch(
-	() => [props.id, props.initialValues, nsdbSchema],
+	() => [props.model, props.id, props.initialValues, props.store],
 	() => {
 		load()
 	},
-	{ immediate: true }
+	{ immediate: true, deep: true, flush: 'sync' }
+)
+
+watch(
+	() => supabaseUser.value?.id ?? null,
+	() => { void load() },
+	{ flush: 'sync' },
 )
 
 function setField(field: string, value: any) {
@@ -232,11 +277,24 @@ function setField(field: string, value: any) {
 		...form.value,
 		[field]: value,
 	}
+	if (fieldErrors.value[field]) {
+		const nextErrors = { ...fieldErrors.value }
+		delete nextErrors[field]
+		fieldErrors.value = nextErrors
+	}
 }
 
-// Clés visibles (on conserve les champs cachés *dans* form, mais on ne les rend pas)
+function isFieldVisibleForMode(key: string, definition: any) {
+	if (hiddenFieldsSet.value.has(key) || definition?.serverOnly) return false
+	if (mode.value === 'create') {
+		return definition?.insertable !== false && !definition?.readonly && definition?.editable !== false
+	}
+	// Existing readonly values stay visible in edit mode, but never enter payloads.
+	return key in form.value || definition?.updatable !== false
+}
+
 const visibleFieldKeys = computed(() =>
-	Object.keys(form.value).filter((key) => !hiddenFieldsSet.value.has(key))
+	Object.keys(nsdbSchema.value).filter(key => isFieldVisibleForMode(key, nsdbSchema.value[key]))
 )
 
 function hasMissingHiddenRequiredFields(): boolean {
@@ -259,7 +317,7 @@ function resetErrors() {
 function validateVisibleRequiredFields(): Record<string, string[]> {
 	const validationErrors: Record<string, string[]> = {}
 
-	for (const [key, def] of Object.entries(nsdbSchema)) {
+	for (const [key, def] of Object.entries(nsdbSchema.value)) {
 		// on ignore les champs non required
 		if (!def.required) continue
 
@@ -282,6 +340,66 @@ function validateVisibleRequiredFields(): Record<string, string[]> {
 	return validationErrors
 }
 
+function normalizeFieldErrors(errors: Record<string, string | string[]> | null | undefined) {
+	return Object.fromEntries(
+		Object.entries(errors ?? {}).map(([key, messages]) => [key, Array.isArray(messages) ? messages : [messages]]),
+	)
+}
+
+function emptyValueForField(key: string) {
+	const definition = nsdbSchema.value[key]
+	if (definition?.nullable) return null
+	if (mode.value === 'create' && definition?.hasDefault) return undefined
+	return ''
+}
+
+function setTextField(key: string, rawValue: string) {
+	setField(key, rawValue === '' ? emptyValueForField(key) : rawValue)
+}
+
+function setNumberField(key: string, rawValue: string) {
+	if (rawValue === '') {
+		setField(key, emptyValueForField(key))
+		return
+	}
+	setField(key, Number(rawValue))
+}
+
+function structuredControlValue(value: any) {
+	if (value == null) return ''
+	if (typeof value === 'string') return value
+	return JSON.stringify(value, null, 2)
+}
+
+function serializeStructuredField(key: string, value: any) {
+	if (value === undefined) return undefined
+	if (value === null) return null
+	if (typeof value !== 'string') return value
+	if (value.trim() === '') return emptyValueForField(key)
+
+	try {
+		const parsed = JSON.parse(value)
+		if (nsdbSchema.value[key]?.type === 'array' && !Array.isArray(parsed)) {
+			throw new Error('Cette valeur doit être un tableau JSON valide.')
+		}
+		return parsed
+	} catch (cause: any) {
+		const message = cause?.message?.includes('tableau')
+			? cause.message
+			: 'Saisissez une valeur JSON valide.'
+		throw Object.assign(new Error(message), { fieldErrors: { [key]: [message] } })
+	}
+}
+
+function normalizeRelationValue(key: string, value: string | number | null) {
+	if (value == null) return null
+	const databaseType = String(nsdbSchema.value[key]?.databaseType ?? '').toLowerCase()
+	if (typeof value === 'string' && /^(smallint|integer|bigint|numeric|decimal|real|double precision)/.test(databaseType)) {
+		return Number(value)
+	}
+	return value
+}
+
 function applyValidationErrors(validationErrors: Record<string, string[]>) {
 	fieldErrors.value = validationErrors
 	error.value = 'Certains champs obligatoires sont manquants.'
@@ -292,10 +410,13 @@ async function resolveRelationsAndBuildPayload(): Promise<Record<string, any>> {
 	const relationCreationPromises: Promise<void>[] = []
 
 	for (const [key, value] of Object.entries(form.value)) {
-		const def = nsdbSchema?.[key]
+		const def = nsdbSchema.value[key]
 
-		// ignore readonly
-		if (def?.readonly || def?.primaryKey) continue
+		// Database capabilities are mode-specific. Legacy schemas still use readonly/editable.
+		if (def?.serverOnly || def?.readonly || def?.editable === false) continue
+		if (mode.value === 'create' && def?.insertable === false) continue
+		if (mode.value === 'edit' && (def?.updatable === false || def?.primaryKey)) continue
+		if (value === undefined) continue
 
 		// ------------------------
 		// Champ relation
@@ -310,14 +431,14 @@ async function resolveRelationsAndBuildPayload(): Promise<Record<string, any>> {
 				typeof value === 'string' ||
 				typeof value === 'number'
 			) {
-				payload[key] = value
+				payload[key] = normalizeRelationValue(key, value)
 				continue
 			}
 
 			// Cas inline-create
 			if (value && typeof value === 'object' && (value as any).__nsdbInlineCreate) {
 				const inline = value as any
-				const model = (nsdbModel.relatedModels?.[table] ?? null) || null
+				const model = relatedModels.value[table] ?? nsdbModel.value.relatedModels?.[table] ?? null
 
 				if (!model || typeof model.create !== 'function') {
 					console.warn(
@@ -379,7 +500,9 @@ async function resolveRelationsAndBuildPayload(): Promise<Record<string, any>> {
 		// ------------------------
 		// Champ "normal"
 		// ------------------------
-		payload[key] = value
+		payload[key] = def?.type === 'json' || def?.type === 'array'
+			? serializeStructuredField(key, value)
+			: value
 	}
 
 	if (relationCreationPromises.length) {
@@ -391,10 +514,10 @@ async function resolveRelationsAndBuildPayload(): Promise<Record<string, any>> {
 
 async function submitToModel(payload: Record<string, any>): Promise<any> {
 	if (mode.value === 'create') {
-		if (typeof nsdbModel.create !== 'function') {
+		if (typeof nsdbModel.value.create !== 'function') {
 			throw new Error('Le nsdb model ne définit pas de méthode create().')
 		}
-		const result = await nsdbModel.create(payload)
+		const result = await nsdbModel.value.create(payload)
 		emit('created', result)
 		return result
 	}
@@ -403,22 +526,24 @@ async function submitToModel(payload: Record<string, any>): Promise<any> {
 	if (props.id == null) {
 		throw new Error('Impossible de mettre à jour : aucun id fourni.')
 	}
-	if (typeof nsdbModel.update !== 'function') {
+	if (typeof nsdbModel.value.update !== 'function') {
 		throw new Error('Le DX handle ne définit pas de méthode update().')
 	}
-	const result = await nsdbModel.update(props.id, payload)
+	const result = await nsdbModel.value.update(props.id, payload)
 	emit('updated', result)
 	return result
 }
 
 function handleSubmitError(e: any) {
 	error.value = e?.message ?? 'Erreur lors de l’enregistrement'
+	status.value = 'error'
 
 	if (e?.fieldErrors && typeof e.fieldErrors === 'object') {
 		fieldErrors.value = e.fieldErrors
 	}
 
 	emit('error', e)
+	void focusFirstInvalidField()
 }
 
 async function onSubmit() {
@@ -436,10 +561,22 @@ async function onSubmit() {
 	const validationErrors = validateVisibleRequiredFields()
 	if (Object.keys(validationErrors).length > 0) {
 		applyValidationErrors(validationErrors)
+		status.value = 'error'
+		await focusFirstInvalidField()
 		return
+	}
+	if (props.validate) {
+		const customErrors = normalizeFieldErrors(await props.validate(form.value, { mode: mode.value, model: props.model }))
+		if (Object.keys(customErrors).length) {
+			applyValidationErrors(customErrors)
+			status.value = 'error'
+			await focusFirstInvalidField()
+			return
+		}
 	}
 
 	saving.value = true
+	status.value = 'saving'
 
 	try {
 		// 4. Construction du payload + résolution des créations liées
@@ -450,22 +587,45 @@ async function onSubmit() {
 
 		// 6. Événement global
 		emit('saved', result)
+		baseline.value = JSON.stringify(form.value)
+		status.value = 'saved'
 	} catch (e: any) {
 		handleSubmitError(e)
 	} finally {
 		saving.value = false
 	}
 }
+
+function fieldId(key: string) {
+	return `nsdb-${formUid}-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+}
+
+function fieldErrorId(key: string) {
+	return `${fieldId(key)}-error`
+}
+
+function numberStep(key: string) {
+	const databaseType = String(nsdbSchema.value[key]?.databaseType ?? '').toLowerCase()
+	return /^(smallint|integer|bigint)/.test(databaseType) ? '1' : 'any'
+}
+
+async function focusFirstInvalidField() {
+	await nextTick()
+	const firstInvalid = formElement.value?.querySelector<HTMLElement>('[aria-invalid="true"]')
+	firstInvalid?.focus()
+}
 </script>
 
 <template>
-	<form class="space-y-4" @submit.prevent="onSubmit">
+<form ref="formElement" class="space-y-4" :aria-busy="saving || loading" @submit.prevent="onSubmit">
 		<!-- HEADER -->
 		<slot
 			name="header"
 			:model="props.model"
 			:mode="mode"
 			:loading="loading"
+			:status="status"
+			:dirty="dirty"
 		>
 			<h3 class="text-lg font-semibold capitalize">
 				{{ mode === 'create' ? `Créer ${props.model}` : `Modifier ${props.model}` }}
@@ -478,7 +638,7 @@ async function onSubmit() {
 			v-if="error"
 			:error="error"
 		>
-			<div class="text-sm text-red-600">
+			<div class="text-sm text-red-600" role="alert" aria-live="polite">
 				{{ error }}
 			</div>
 		</slot>
@@ -491,6 +651,9 @@ async function onSubmit() {
 			:errors="fieldErrors"
 			:mode="mode"
 			:loading="loading"
+			:saving="saving"
+			:status="status"
+			:dirty="dirty"
 			:visible-field-keys="visibleFieldKeys"
 			:schema="nsdbSchema"
 		>
@@ -500,38 +663,109 @@ async function onSubmit() {
 				:key="key"
 				class="space-y-1"
 			>
-				<label class="block text-sm font-medium capitalize">
-					{{ labels?.find(l => l.key === key)?.label || key }}
+				<label :for="fieldId(key)" class="block text-sm font-medium capitalize">
+					{{ labels?.find(l => l.key === key)?.label || nsdbSchema[key]?.label || key }}
 				</label>
 
+				<slot
+					:name="`field-${key}`"
+					:field="nsdbSchema[key]"
+					:field-key="key"
+					:value="form[key]"
+					:update="(value: any) => setField(key, value)"
+					:error="fieldErrors[key]?.[0] ?? null"
+					:mode="mode"
+					:disabled="loading || saving"
+				>
 				<input
 					v-if="nsdbSchema[key]?.type === 'text'"
+					:id="fieldId(key)"
+					:name="key"
 					type="text"
 					class="border text-black rounded px-3 py-2 w-full text-sm"
 					:value="form[key] ?? ''"
 					:disabled="loading || saving"
+					:readonly="nsdbSchema[key]?.readonly"
+					:required="nsdbSchema[key]?.required"
+					:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+					:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
 					placeholder="Entrez une valeur"
-					@input="setField(key, ($event.target as HTMLInputElement).value)"
+					@input="setTextField(key, ($event.target as HTMLInputElement).value)"
 				/>
 
 				<input
-					v-if="nsdbSchema[key]?.type === 'number'"
+					v-else-if="nsdbSchema[key]?.type === 'number'"
+					:id="fieldId(key)"
+					:name="key"
 					type="number"
+					:step="numberStep(key)"
 					class="border text-black rounded px-3 py-2 w-full text-sm"
 					:value="form[key] ?? ''"
 					:disabled="loading || saving"
+					:readonly="nsdbSchema[key]?.readonly"
+					:required="nsdbSchema[key]?.required"
+					:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+					:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
 					placeholder="Entrez une valeur"
-					@input="setField(key, Number(($event.target as HTMLInputElement).value))"
+					@input="setNumberField(key, ($event.target as HTMLInputElement).value)"
+				/>
+
+				<textarea
+					v-else-if="['textarea', 'json', 'array'].includes(nsdbSchema[key]?.type)"
+					:id="fieldId(key)"
+					:name="key"
+					class="border text-black rounded px-3 py-2 w-full text-sm"
+					:value="nsdbSchema[key]?.type === 'textarea' ? (form[key] ?? '') : structuredControlValue(form[key])"
+					:disabled="loading || saving"
+					:readonly="nsdbSchema[key]?.readonly"
+					:required="nsdbSchema[key]?.required"
+					:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+					:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
+					placeholder="Entrez une valeur"
+					@input="setTextField(key, ($event.target as HTMLTextAreaElement).value)"
+				/>
+
+				<input
+					v-else-if="nsdbSchema[key]?.type === 'datetime' || nsdbSchema[key]?.type === 'date'"
+					:id="fieldId(key)"
+					:name="key"
+					:type="nsdbSchema[key]?.type === 'date' ? 'date' : 'datetime-local'"
+					class="border text-black rounded px-3 py-2 w-full text-sm"
+					:value="form[key] ?? ''"
+					:disabled="loading || saving"
+					:readonly="nsdbSchema[key]?.readonly"
+					:required="nsdbSchema[key]?.required"
+					:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+					:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
+					@input="setTextField(key, ($event.target as HTMLInputElement).value)"
+				/>
+
+				<input
+					v-else-if="nsdbSchema[key]?.type === 'file'"
+					:id="fieldId(key)"
+					:name="key"
+					type="file"
+					class="border text-black rounded px-3 py-2 w-full text-sm"
+					:disabled="loading || saving || nsdbSchema[key]?.readonly"
+					:required="nsdbSchema[key]?.required"
+					:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+					:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
+					@change="setField(key, ($event.target as HTMLInputElement).files?.[0] ?? null)"
 				/>
 
 				<select
 					v-else-if="nsdbSchema[key]?.type === 'select'"
+					:id="fieldId(key)"
+					:name="key"
 					class="border text-black rounded px-3 py-2 w-full text-sm"
 					:value="form[key] ?? ''"
-					:disabled="loading || saving"
-					@change="setField(key, ($event.target as HTMLSelectElement).value)"
+					:disabled="loading || saving || nsdbSchema[key]?.readonly"
+					:required="nsdbSchema[key]?.required"
+					:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+					:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
+					@change="setTextField(key, ($event.target as HTMLSelectElement).value)"
 				>
-					<option value="" disabled>Sélectionnez une option</option>
+					<option value="" :disabled="nsdbSchema[key]?.required && !nsdbSchema[key]?.nullable">Sélectionnez une option</option>
 					<option
 						v-for="opt in nsdbSchema[key]?.options || []"
 						:key="opt.value"
@@ -547,29 +781,52 @@ async function onSubmit() {
 				>
 					<input
 						type="checkbox"
-						:id="`checkbox-${key}`"
+						:id="fieldId(key)"
 						:name="key"
 						:checked="!!form[key]"
-						:disabled="loading || saving"
+						:disabled="loading || saving || nsdbSchema[key]?.readonly"
+						:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+						:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
 						@change="setField(key, ($event.target as HTMLInputElement).checked)"
 					/>
-					<label :for="`checkbox-${key}`">
-						{{ labels?.find(l => l.key === key)?.label || key }}
-					</label>
 				</div>
 
 				<!-- RELATION : utilise NsdbRelationSelect basé sur le schema -->
 				<NsdbRelationSelect
 					v-else-if="nsdbSchema?.[key]?.type === 'relation' && nsdbSchema[key]?.relation"
+					:input-id="fieldId(key)"
+					:name="key"
 					:relation="nsdbSchema[key].relation"
 					:value="form[key] ?? null"
 					:disabled="loading || saving || nsdbSchema[key]?.readonly"
+					:required="nsdbSchema[key]?.required"
+					:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+					:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
+					:store="props.store"
 					@update:value="setField(key, $event)"
 				/>
 
+				<input
+					v-else
+					:id="fieldId(key)"
+					:name="key"
+					type="text"
+					class="border text-black rounded px-3 py-2 w-full text-sm"
+					:value="form[key] ?? ''"
+					:disabled="loading || saving"
+					:readonly="nsdbSchema[key]?.readonly"
+					:required="nsdbSchema[key]?.required"
+					:aria-invalid="fieldErrors[key]?.length ? 'true' : undefined"
+					:aria-describedby="fieldErrors[key]?.length ? fieldErrorId(key) : undefined"
+					@input="setTextField(key, ($event.target as HTMLInputElement).value)"
+				/>
+				</slot>
+
 				<p
 					v-if="fieldErrors[key]?.length"
+					:id="fieldErrorId(key)"
 					class="text-xs text-red-500"
+					role="alert"
 				>
 					{{ fieldErrors[key][0] }}
 				</p>
@@ -585,6 +842,8 @@ async function onSubmit() {
 			name="actions"
 			:mode="mode"
 			:saving="saving"
+			:status="status"
+			:dirty="dirty"
 			:can-submit="!saving && !loading && missingRequiredHiddenFields.length === 0"
 		>
 			<div class="flex justify-end gap-2">

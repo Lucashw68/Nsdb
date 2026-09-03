@@ -180,7 +180,7 @@ Example for a `playlists` table:
 
 ```vue
 <script setup lang="ts">
-const playlists = usePlaylistsModel()
+const playlists = usePlaylists()
 
 await playlists.fetch({
 	select: '*',
@@ -212,15 +212,20 @@ totalCount
 schema
 fields
 editableKeys
-new
 fetch
-find
+refresh
+invalidate
 getById
 create
 update
 remove
-sync
+subscribe
+unsubscribe
 ```
+
+`createDraft()` is an advanced form helper. The former `new`, `find`, `sync`,
+`fetch({ force: true })`, and `NsdbList.reload()` aliases are not available in
+the 1.0 release candidate.
 
 Do not use removed compatibility aliases on models:
 
@@ -236,7 +241,7 @@ delete
 
 ## Server Query Options
 
-Use `fetch` or `find` with server-side query options:
+Use `fetch` with one server-side query object:
 
 ```ts
 await playlists.fetch({
@@ -434,8 +439,6 @@ createBucket
 updateBucket
 deleteBucket
 emptyBucket
-joinPath
-normalizePath
 ```
 
 ## Direct API
@@ -450,10 +453,10 @@ const list = await api.all('playlists', {
 	limit: 10,
 })
 
-const one = await api.show('playlists', 'id')
+const one = await api.getById('playlists', 'id')
 const created = await api.create('playlists', { title: 'New' })
 await api.update('playlists', created.data.id, { title: 'Updated' })
-await api.destroy('playlists', created.data.id)
+await api.remove('playlists', created.data.id)
 ```
 
 This direct API is separate from generated model handles and still uses its own method names.
