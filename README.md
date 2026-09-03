@@ -4,7 +4,7 @@ NSDB transforme les types d'une base Supabase en modèles Nuxt typés, stores Pi
 
 ## Quick start
 
-Prérequis validés pour la RC : Node 22.14+, Nuxt 4.2.1+, Vue 3.5.24+, `@nuxtjs/supabase` 1.6.1+, `@pinia/nuxt` 0.11.2+, Pinia 3.0.3+, un projet Supabase et ses policies RLS. Le CLI Supabase est requis pour générer les types ; une URL PostgreSQL directe est recommandée pour les métadonnées exactes.
+Prérequis validés pour la RC : Node 22.14+, Nuxt 4.2.1+, Vue 3.5.24+, `@nuxtjs/supabase` 1.6.1 ou 2.x, `@pinia/nuxt` 0.11.2+, Pinia 3.0.3+, un projet Supabase et ses policies RLS. Le CLI Supabase est requis pour générer les types ; une URL PostgreSQL directe est recommandée pour les métadonnées exactes.
 
 ```bash
 npm install @lucashw68/nsdb @nuxtjs/supabase @pinia/nuxt pinia

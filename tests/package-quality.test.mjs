@@ -24,6 +24,7 @@ test('package exports expose canonical entry points and keep internals private',
 	assert.equal(Object.keys(packageJson.exports).length, 13)
 	assert.equal(packageJson.version, '1.0.0-rc.1')
 	assert.equal(packageJson.peerDependencies.nuxt, '^4.2.1')
+	assert.equal(packageJson.peerDependencies['@nuxtjs/supabase'], '^1.6.1 || ^2.0.0')
 	assert.equal(packageJson.peerDependencies['@pinia/nuxt'], '^0.11.2')
 	assert.equal(packageJson.peerDependencies.pinia, '^3.0.3')
 	assert.equal(packageJson.peerDependencies.vue, '^3.5.24')

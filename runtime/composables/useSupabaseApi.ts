@@ -4,7 +4,6 @@ import type {
 } from '@lucashw68/nsdb/types/list'
 import { applyListOptions, applySearch, applyWhereFilters } from '../query'
 
-type SupabaseFrom = ReturnType<ReturnType<typeof useSupabaseClient>['from']>
 type QueryBuilder = any
 type MutationPayload = Record<string, unknown> | Record<string, unknown>[]
 
@@ -85,6 +84,12 @@ export const useSupabaseApi = () => {
 	if (!supabaseClient) {
 		throw new Error('[nsdb] Supabase client not found. Install @nuxtjs/supabase.')
 	}
+	// This advanced API deliberately accepts runtime table names. Recent typed
+	// Supabase clients narrow `from()` to generated relations, so keep the
+	// unavoidable dynamic cast at this single low-level escape-hatch boundary.
+	const from = (resource: string): QueryBuilder => (
+		supabaseClient.from as unknown as (relation: string) => QueryBuilder
+	)(resource)
 
 	async function all<T = any>(
 		resource: string,
@@ -92,7 +97,7 @@ export const useSupabaseApi = () => {
 	): Promise<SupabaseApiListResponse<T>> {
 		const selectClause = options.select ?? '*'
 
-		let q: any = supabaseClient.from(resource).select(selectClause, { count: 'exact' })
+		let q: QueryBuilder = from(resource).select(selectClause, { count: 'exact' })
 		q = applyWhereFilters(q, options.where)
 		q = applySearch(q, options)
 		q = applyListOptions(q, options)
@@ -106,8 +111,7 @@ export const useSupabaseApi = () => {
 		id: string | number,
 		options: { key?: string; select?: string } = {},
 	) {
-		const { data, error } = await supabaseClient
-			.from(resource)
+		const { data, error } = await from(resource)
 			.select(options.select ?? '*')
 			.eq(options.key ?? 'id', id)
 			.limit(1)
@@ -117,7 +121,7 @@ export const useSupabaseApi = () => {
 	}
 
 	async function create<T = any>(resource: string, payload: MutationPayload) {
-		const { data, error } = await (supabaseClient.from(resource) as QueryBuilder).insert(payload).select().single()
+		const { data, error } = await from(resource).insert(payload).select().single()
 		return handleResponse<T>({ data, error }, `CREATE ${resource}`)
 	}
 
@@ -127,18 +131,18 @@ export const useSupabaseApi = () => {
 		payload: MutationPayload,
 		options: { key?: string } = {},
 	) {
-		const { data, error } = await (supabaseClient.from(resource) as QueryBuilder).update(payload).eq(options.key ?? 'id', id).select()
+		const { data, error } = await from(resource).update(payload).eq(options.key ?? 'id', id).select()
 		return handleResponse<T | T[]>({ data, error }, `UPDATE ${resource}/${id}`)
 	}
 
 	async function remove(resource: string, id: string | number, options: { key?: string } = {}) {
-		const { data, error } = await supabaseClient.from(resource).delete().eq(options.key ?? 'id', id)
+		const { data, error } = await from(resource).delete().eq(options.key ?? 'id', id)
 		return handleResponse({ data, error }, `DELETE ${resource}/${id}`)
 	}
 
 	async function upsert<T = any>(resource: string, payload: MutationPayload, options: { onConflict?: string } = {}) {
 		const upsertOptions = options.onConflict ? { onConflict: options.onConflict } : undefined
-		const q: QueryBuilder = (supabaseClient.from(resource) as QueryBuilder)
+		const q: QueryBuilder = from(resource)
 			.upsert(payload, upsertOptions)
 			.select()
 		const { data, error } = await q
@@ -146,7 +150,7 @@ export const useSupabaseApi = () => {
 	}
 
 	async function count(resource: string, where?: { property: string; value: string | number }) {
-		let q: QueryBuilder = supabaseClient.from(resource).select('*', { count: 'exact', head: true })
+		let q: QueryBuilder = from(resource).select('*', { count: 'exact', head: true })
 		if (where) q = q.eq(where.property, where.value)
 		const { count, error } = await q
 		return handleResponse<number | null>({ data: count ?? null, error }, `COUNT ${resource}`)
@@ -154,7 +158,7 @@ export const useSupabaseApi = () => {
 
 	async function findOne<T = any>(resource: string, options: ListOptions) {
 		const { select = '*', where } = options
-		let q: QueryBuilder = supabaseClient.from(resource).select(select)
+		let q: QueryBuilder = from(resource).select(select)
 		q = applyWhereFilters(q, where)
 		const { data, error } = await q.limit(1).single()
 		return handleResponse<T>({ data, error }, `FIND ONE ${resource}`)

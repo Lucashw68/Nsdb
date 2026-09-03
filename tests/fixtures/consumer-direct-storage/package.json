@@ -4,7 +4,7 @@
   "type": "module",
   "dependencies": {
     "@lucashw68/nsdb": "file:__NSDB_TARBALL__",
-    "@nuxtjs/supabase": "1.6.1",
+    "@nuxtjs/supabase": "2.0.9",
     "@pinia/nuxt": "0.11.2",
     "nuxt": "4.2.1",
     "pinia": "3.0.3",
