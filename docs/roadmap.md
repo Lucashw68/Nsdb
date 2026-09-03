@@ -177,6 +177,12 @@ This roadmap is based on the code audited on 2026-09-01, not only on README clai
 - **Solution:** NSDB guarantees semantic, functional markup without Tailwind and leaves appearance to application CSS, `classes`, `unstyled` and slots. NSDB remains a CRUD bridge, not a design system.
 - **Tests:** minimal and direct component tarball consumers typecheck/build with no Tailwind dependency or internal glob; Example also builds after removing the glob.
 
+### P2.9 Unify release provenance — done for `1.0.0-rc.1`
+
+- **Problem:** the package history lived in `Nsdb/`, while the validated Example, documentation, Supabase migrations and CI were outside that Git provenance.
+- **Solution:** attach the existing package history to a repository rooted above `Nsdb/` with a non-squashed subtree merge. The package history and tags remain reachable without rewriting, and all release evidence is now tracked by one root commit.
+- **Tests:** clean-tree generation, package suites, exact tarball consumers, Example, local Supabase/RLS/Storage/Realtime, Playwright and Agorion are replayed from the root candidate.
+
 ## P3 — future capabilities and optimization
 
 ### P3.1 Higher-level relation DSL — open

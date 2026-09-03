@@ -21,7 +21,12 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Lucashw68/nsdb"
+		"url": "git+https://github.com/Lucashw68/nsdb.git",
+		"directory": "Nsdb"
+	},
+	"homepage": "https://github.com/Lucashw68/nsdb#readme",
+	"bugs": {
+		"url": "https://github.com/Lucashw68/nsdb/issues"
 	},
 	"exports": {
 		".": "./module.ts",

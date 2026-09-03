@@ -97,18 +97,28 @@ Validation performed on 2026-09-03. No package was published.
 
 ### Artifact
 
-- package commit: `e9ae7523b6fd1b0b70c3cfca42b4ea516169fbc1`;
+- root candidate: the commit containing this validation record (resolve it with
+  `git rev-parse HEAD`; the immutable SHA is also recorded in the release
+  report before tagging);
+- root-topology integration commit: `f223e7b74427e37ec813a3bb2d40aec71ae32f08`;
+- preserved NSDB package-history parent: `e9ae7523b6fd1b0b70c3cfca42b4ea516169fbc1`;
 - package version: `1.0.0-rc.1`;
 - tarball: `lucashw68-nsdb-1.0.0-rc.1.tgz`;
-- SHA-256: `41e8405d2da082c609ecca65ad20b59815ec9e85b34a48a2eef561e474592849`;
-- npm shasum: `6c9d86b6f13155250fc615ab7e1eb047aadacc45`;
-- package size: 60,278 bytes compressed, 238,740 bytes unpacked, 48 files;
+- SHA-256: `ad1158866c44bc789dff62574bf449c86c630425e03435c2814fcb5cb013a2a4`;
+- npm shasum: `7fae7cc16fe27553fcad9df03ecbe844c0ecc89b`;
+- package size: 60,335 bytes compressed, 238,908 bytes unpacked, 48 files;
 - validation runtime: Node 22.21.0, npm 10.9.4, Yarn 1.22.22 and Supabase CLI 2.39.2.
 
 `npm pack --dry-run --json` and the installed artifact report the same metadata.
 The tarball exposes 13 deliberate package subpaths. Negative import assertions
 cover runtime internals, helpers, scripts, templates, nested components and
 removed aliases.
+
+The repository root now versions `Nsdb/`, `Example/`, `docs/`, `supabase/`
+and `.github/` under one commit. The package history was attached as the
+second parent of a non-squashed subtree merge: no history was rewritten and
+the existing release tags remain reachable. A complete pre-migration bundle
+was retained outside the working tree while the topology was changed.
 
 ### Full suite
 
@@ -219,22 +229,17 @@ field/cell/full-render slots, `refresh()` on the list ref, and the form's
 
 ### RC blockers
 
-One release-process blocker remains: only `Nsdb/` is a valid Git repository in
-the supplied checkout. The root `.git` is an empty directory, so `Example/`,
-`docs/`, Supabase migrations and the CI workflow cannot be tied to the package
-SHA or proven clean by Git. The package artifact itself is reproducible from a
-clean commit, but the claim that the *full* validation ran on one exact tagged
-repository state is not yet provable. Repair or clarify the repository topology
-and commit these release fixtures/documents before tagging.
+None. The former root-provenance blocker is resolved: the package, Example,
+documentation, local Supabase definition and CI are present in the same clean
+root commit, and the full validation was replayed without changing tracked
+files.
 
 ### 1.0 blockers
 
-- Resolve the same validation-provenance blocker before the RC tag.
-- Obtain one green whole-application validation that exercises generated CRUD
-  aliases in an existing application, or explicitly accept Agorion's green
-  package/module migration plus the mechanically proven NewMysic/LecturoMetre
-  migrations as sufficient pilot evidence. This is a release-confidence gate,
-  not an API defect.
+None found. Agorion provides a fully green existing-application package,
+typecheck, build and runtime validation. The mechanical NewMysic and
+LecturoMetre migrations provide additional compatibility evidence; their
+unrelated baseline failures are not NSDB release gates.
 
 No security, data-coherence, public-API, tarball, type or NSDB runtime blocker
 was found.
@@ -250,12 +255,10 @@ blockers.
 
 ### Release recommendation
 
-**NOT READY FOR RC TAG yet.** The code/package candidate and its exact tarball
-are technically green, and the frozen API did not require a change. The sole RC
-tag blocker is provenance: the release-supporting Example, docs, migrations and
-CI are not tracked by the valid `Nsdb/` Git repository in this checkout. Once
-that topology is repaired and the unchanged suite is replayed on the resulting
-commit, the package evidence supports **READY FOR RC**.
+**READY FOR RC TAG.** One root commit now identifies the complete validated
+release state, the rebuilt tarball and external consumers are green, Agorion is
+green with that exact artifact, and the frozen API required no change. No tag,
+push or package publication was performed by this validation.
 
 After a manual RC publication, keep the contract feature-frozen, install the RC
 in pilot applications, accept only correctness/security/typing/packaging fixes,
