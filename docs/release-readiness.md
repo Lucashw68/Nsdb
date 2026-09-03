@@ -104,9 +104,9 @@ Validation performed on 2026-09-03. No package was published.
 - preserved NSDB package-history parent: `e9ae7523b6fd1b0b70c3cfca42b4ea516169fbc1`;
 - package version: `1.0.0-rc.1`;
 - tarball: `lucashw68-nsdb-1.0.0-rc.1.tgz`;
-- SHA-256: `ad1158866c44bc789dff62574bf449c86c630425e03435c2814fcb5cb013a2a4`;
-- npm shasum: `7fae7cc16fe27553fcad9df03ecbe844c0ecc89b`;
-- package size: 60,335 bytes compressed, 238,908 bytes unpacked, 48 files;
+- SHA-256: `2f0857804e6378632b77d6f86ee2e92a5ade8b46f51885cbad3854cec972a44c`;
+- npm shasum: `03d895aff572ddd4c9145b04bca4035e2564d736`;
+- package size: 60,324 bytes compressed, 238,895 bytes unpacked, 48 files;
 - validation runtime: Node 22.21.0, npm 10.9.4, Yarn 1.22.22 and Supabase CLI 2.39.2.
 
 `npm pack --dry-run --json` and the installed artifact report the same metadata.
