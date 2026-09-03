@@ -1,0 +1,51 @@
+{
+	"name": "nuxt-app",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"build": "nuxt build",
+		"dev": "nuxt dev",
+		"generate": "nuxt generate",
+		"preview": "nuxt preview",
+		"typecheck": "nuxt typecheck",
+		"check": "nuxt typecheck && nuxt build",
+		"supabase:start": "supabase start --workdir ..",
+		"supabase:reset": "supabase db reset --workdir ..",
+		"supabase:stop": "supabase stop --workdir .. --no-backup",
+		"test:integration": "node --test \"integration/**/*.test.mjs\"",
+		"test:e2e": "playwright test",
+		"postinstall": "nuxt prepare",
+		"nsdb:schemas:debug": "node --inspect-brk node_modules/@lucashw68/nsdb/cli/index.js generate:schemas",
+		"nsdb:types": "node node_modules/@lucashw68/nsdb/cli/index.js generate:types",
+		"nsdb:enums": "node node_modules/@lucashw68/nsdb/cli/index.js generate:enums",
+		"nsdb:schemas": "node node_modules/@lucashw68/nsdb/cli/index.js generate:schemas",
+		"nsdb:stores": "node node_modules/@lucashw68/nsdb/cli/index.js generate:stores",
+		"nsdb:models": "node node_modules/@lucashw68/nsdb/cli/index.js generate:models",
+		"nsdb:composables": "node node_modules/@lucashw68/nsdb/cli/index.js generate:composables",
+		"nsdb:all": "npm run nsdb:types && npm run nsdb:enums && npm run nsdb:schemas && npm run nsdb:stores && npm run nsdb:models && npm run nsdb:composables"
+	},
+	"dependencies": {
+		"@lucashw68/nsdb": "link:../Nsdb",
+		"@nuxt/content": "^3.8.2",
+		"@nuxt/fonts": "0.11.4",
+		"@nuxt/icon": "2.0.0",
+		"@nuxt/image": "1.11.0",
+		"@nuxtjs/supabase": "1.6.1",
+		"@nuxtjs/tailwindcss": "6.14.0",
+		"@pinia/nuxt": "0.11.2",
+		"@supabase/supabase-js": "^2.56.0",
+		"better-sqlite3": "^12.4.1",
+		"entities": "7.0.1",
+		"nuxt": "4.2.1",
+		"pinia": "^3.0.3",
+		"pinia-plugin-persistedstate": "^4.5.0",
+		"vue": "3.5.24",
+		"vue-router": "^4.5.1"
+	},
+	"devDependencies": {
+		"@playwright/test": "1.55.0",
+		"@tailwindcss/typography": "^0.5.19",
+		"supabase": "2.39.2",
+		"vue-tsc": "^3.3.11"
+	}
+}

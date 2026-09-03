@@ -1,0 +1,2 @@
+-- Integration tests create uniquely named users and data through public APIs.
+-- Keep this seed empty so every run starts from a deterministic authorization state.

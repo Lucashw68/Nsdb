@@ -1,0 +1,96 @@
+name: NSDB CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: nsdb-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Nsdb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: Nsdb/yarn.lock
+      - run: yarn install --frozen-lockfile
+      - run: yarn typecheck
+      - run: yarn test
+      - name: Verify published package contents
+        run: npm pack --dry-run
+
+  consumer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: |
+            Nsdb/yarn.lock
+            Example/yarn.lock
+      - run: yarn install --frozen-lockfile
+      - run: yarn install --frozen-lockfile --force
+        working-directory: Nsdb
+      - run: yarn typecheck
+      - run: yarn build
+
+  packed-consumer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Nsdb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: Nsdb/yarn.lock
+      - run: yarn install --frozen-lockfile
+      - name: Pack, install and build an isolated Nuxt consumer
+        run: yarn test:consumer
+
+  local-supabase:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: |
+            Nsdb/yarn.lock
+            Example/yarn.lock
+      - run: yarn install --frozen-lockfile
+      - run: yarn install --frozen-lockfile --force
+        working-directory: Nsdb
+      - run: yarn playwright install --with-deps chromium
+      - run: yarn supabase:start
+      - run: yarn test:integration
+      - run: yarn test:e2e
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: Example/test-results
+          if-no-files-found: ignore
+      - name: Stop local Supabase
+        if: always()
+        run: yarn supabase:stop

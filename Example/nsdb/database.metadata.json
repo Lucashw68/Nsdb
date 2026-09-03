@@ -1,0 +1,1409 @@
+{
+  "version": 1,
+  "schema": "public",
+  "tables": {
+    "authors": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "authors_name_key",
+          "columns": [
+            "name"
+          ]
+        },
+        {
+          "name": "authors_pkey",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "name": {
+          "position": 2,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": true,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": []
+    },
+    "categories": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "categories_pkey",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "parent_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": true,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "name": {
+          "position": 3,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "categories_parent_id_fkey",
+          "columns": [
+            "parent_id"
+          ],
+          "referencedRelation": "categories",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    },
+    "component_records": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "component_records_pkey",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "component_records_title_key",
+          "columns": [
+            "title"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "user_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "auth.uid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "title": {
+          "position": 3,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": true,
+          "insertable": true,
+          "updatable": true
+        },
+        "notes": {
+          "position": 4,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": true,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "priority": {
+          "position": 5,
+          "dataType": "integer",
+          "databaseType": "int4",
+          "nullable": true,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "published": {
+          "position": 6,
+          "dataType": "boolean",
+          "databaseType": "bool",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "false",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "event_date": {
+          "position": 7,
+          "dataType": "date",
+          "databaseType": "date",
+          "nullable": true,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "status": {
+          "position": 8,
+          "dataType": "playlist_status",
+          "databaseType": "playlist_status",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'draft'::playlist_status",
+          "identity": false,
+          "generated": false,
+          "enum": true,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "metadata": {
+          "position": 9,
+          "dataType": "jsonb",
+          "databaseType": "jsonb",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'{}'::jsonb",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "tags": {
+          "position": 10,
+          "dataType": "text[]",
+          "databaseType": "_text",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'{}'::text[]",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "created_at": {
+          "position": 11,
+          "dataType": "timestamp with time zone",
+          "databaseType": "timestamptz",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "now()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "component_records_user_id_fkey",
+          "columns": [
+            "user_id"
+          ],
+          "referencedRelation": "users",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    },
+    "composite_children": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "composite_children_pkey",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "tenant_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "parent_code": {
+          "position": 3,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "composite_children_tenant_id_parent_code_fkey",
+          "columns": [
+            "tenant_id",
+            "parent_code"
+          ],
+          "referencedRelation": "composite_parents",
+          "referencedColumns": [
+            "tenant_id",
+            "code"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    },
+    "composite_parents": {
+      "primaryKey": [
+        "tenant_id",
+        "code"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "composite_parents_pkey",
+          "columns": [
+            "tenant_id",
+            "code"
+          ]
+        }
+      ],
+      "columns": {
+        "tenant_id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": false,
+          "insertable": true,
+          "updatable": false
+        },
+        "code": {
+          "position": 2,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": false,
+          "insertable": true,
+          "updatable": false
+        },
+        "label": {
+          "position": 3,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": []
+    },
+    "messages": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "messages_pkey",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "sender_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "receiver_id": {
+          "position": 3,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "body": {
+          "position": 4,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "messages_receiver_id_fkey",
+          "columns": [
+            "receiver_id"
+          ],
+          "referencedRelation": "authors",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        },
+        {
+          "foreignKeyName": "messages_sender_id_fkey",
+          "columns": [
+            "sender_id"
+          ],
+          "referencedRelation": "authors",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    },
+    "playlist_links": {
+      "primaryKey": [
+        "parent_id",
+        "child_id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "playlist_links_pkey",
+          "columns": [
+            "parent_id",
+            "child_id"
+          ]
+        }
+      ],
+      "columns": {
+        "parent_id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": false,
+          "insertable": true,
+          "updatable": false
+        },
+        "child_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": false,
+          "insertable": true,
+          "updatable": false
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "playlist_links_child_id_fkey",
+          "columns": [
+            "child_id"
+          ],
+          "referencedRelation": "playlists",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        },
+        {
+          "foreignKeyName": "playlist_links_parent_id_fkey",
+          "columns": [
+            "parent_id"
+          ],
+          "referencedRelation": "playlists",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    },
+    "playlists": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "playlists_pkey",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "user_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "title": {
+          "position": 3,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "description": {
+          "position": 4,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": true,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "status": {
+          "position": 5,
+          "dataType": "playlist_status",
+          "databaseType": "playlist_status",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'draft'::playlist_status",
+          "identity": false,
+          "generated": false,
+          "enum": true,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "metadata": {
+          "position": 6,
+          "dataType": "jsonb",
+          "databaseType": "jsonb",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'{}'::jsonb",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "tags": {
+          "position": 7,
+          "dataType": "text[]",
+          "databaseType": "_text",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'{}'::text[]",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "created_at": {
+          "position": 8,
+          "dataType": "timestamp with time zone",
+          "databaseType": "timestamptz",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "now()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "updated_at": {
+          "position": 9,
+          "dataType": "timestamp with time zone",
+          "databaseType": "timestamptz",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "now()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "playlists_user_id_fkey",
+          "columns": [
+            "user_id"
+          ],
+          "referencedRelation": "users",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    },
+    "post_tags": {
+      "primaryKey": [
+        "post_id",
+        "tag_id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "post_tags_pkey",
+          "columns": [
+            "post_id",
+            "tag_id"
+          ]
+        }
+      ],
+      "columns": {
+        "post_id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": false,
+          "insertable": true,
+          "updatable": false
+        },
+        "tag_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": false,
+          "insertable": true,
+          "updatable": false
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "post_tags_post_id_fkey",
+          "columns": [
+            "post_id"
+          ],
+          "referencedRelation": "posts",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        },
+        {
+          "foreignKeyName": "post_tags_tag_id_fkey",
+          "columns": [
+            "tag_id"
+          ],
+          "referencedRelation": "tags",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    },
+    "posts": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "posts_pkey",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "author_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "title": {
+          "position": 3,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "posts_author_id_fkey",
+          "columns": [
+            "author_id"
+          ],
+          "referencedRelation": "authors",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    },
+    "profiles": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "profiles_pkey",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "profiles_user_id_key",
+          "columns": [
+            "user_id"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "user_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": true,
+          "insertable": true,
+          "updatable": true
+        },
+        "display_name": {
+          "position": 3,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "created_at": {
+          "position": 4,
+          "dataType": "timestamp with time zone",
+          "databaseType": "timestamptz",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "now()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "profiles_user_id_fkey",
+          "columns": [
+            "user_id"
+          ],
+          "referencedRelation": "users",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": true
+        }
+      ]
+    },
+    "schema_features": {
+      "primaryKey": [
+        "slug"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "schema_features_pkey",
+          "columns": [
+            "slug"
+          ]
+        },
+        {
+          "name": "schema_features_sequence_by_default_key",
+          "columns": [
+            "sequence_by_default"
+          ]
+        },
+        {
+          "name": "schema_features_sequence_id_key",
+          "columns": [
+            "sequence_id"
+          ]
+        }
+      ],
+      "columns": {
+        "slug": {
+          "position": 1,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "sequence_id": {
+          "position": 2,
+          "dataType": "bigint",
+          "databaseType": "int8",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": null,
+          "identity": "always",
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": true,
+          "insertable": false,
+          "updatable": false
+        },
+        "sequence_by_default": {
+          "position": 3,
+          "dataType": "bigint",
+          "databaseType": "int8",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": null,
+          "identity": "byDefault",
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": true,
+          "insertable": true,
+          "updatable": true
+        },
+        "uuid_default": {
+          "position": 4,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "required_field": {
+          "position": 5,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "nullable_field": {
+          "position": 6,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": true,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "custom_default": {
+          "position": 7,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'hello'::text",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "state": {
+          "position": 8,
+          "dataType": "playlist_status",
+          "databaseType": "playlist_status",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'draft'::playlist_status",
+          "identity": false,
+          "generated": false,
+          "enum": true,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "payload": {
+          "position": 9,
+          "dataType": "jsonb",
+          "databaseType": "jsonb",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'{}'::jsonb",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "labels": {
+          "position": 10,
+          "dataType": "text[]",
+          "databaseType": "_text",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "'{}'::text[]",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "created_on": {
+          "position": 11,
+          "dataType": "timestamp with time zone",
+          "databaseType": "timestamptz",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "now()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "computed_label": {
+          "position": 12,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": true,
+          "hasDefault": true,
+          "defaultExpression": "((slug || ':'::text) || required_field)",
+          "identity": false,
+          "generated": "stored",
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": false,
+          "updatable": false
+        }
+      },
+      "relationships": []
+    },
+    "tags": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "tags_name_key",
+          "columns": [
+            "name"
+          ]
+        },
+        {
+          "name": "tags_pkey",
+          "columns": [
+            "id"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "name": {
+          "position": 2,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": true,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": []
+    },
+    "tracks": {
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "tracks_pkey",
+          "columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "tracks_playlist_id_position_key",
+          "columns": [
+            "playlist_id",
+            "position"
+          ]
+        }
+      ],
+      "columns": {
+        "id": {
+          "position": 1,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "gen_random_uuid()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": true,
+          "unique": true,
+          "insertable": true,
+          "updatable": false
+        },
+        "playlist_id": {
+          "position": 2,
+          "dataType": "uuid",
+          "databaseType": "uuid",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "title": {
+          "position": 3,
+          "dataType": "text",
+          "databaseType": "text",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "position": {
+          "position": 4,
+          "dataType": "integer",
+          "databaseType": "int4",
+          "nullable": false,
+          "hasDefault": false,
+          "defaultExpression": null,
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        },
+        "created_at": {
+          "position": 5,
+          "dataType": "timestamp with time zone",
+          "databaseType": "timestamptz",
+          "nullable": false,
+          "hasDefault": true,
+          "defaultExpression": "now()",
+          "identity": false,
+          "generated": false,
+          "enum": false,
+          "primaryKey": false,
+          "unique": false,
+          "insertable": true,
+          "updatable": true
+        }
+      },
+      "relationships": [
+        {
+          "foreignKeyName": "tracks_playlist_id_fkey",
+          "columns": [
+            "playlist_id"
+          ],
+          "referencedRelation": "playlists",
+          "referencedColumns": [
+            "id"
+          ],
+          "isOneToOne": false
+        }
+      ]
+    }
+  }
+}

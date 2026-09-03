@@ -1,0 +1,36 @@
+# Dependencies and package-manager caches
+**/node_modules/
+**/.cache/
+
+# Nuxt, Nitro, build and test outputs
+**/.nuxt/
+**/.output/
+**/.nitro/
+**/.data/
+**/dist/
+**/coverage/
+**/test-results/
+**/playwright-report/
+*.tgz
+
+# Local environment and registry credentials
+**/.env
+**/.env.*
+!**/.env.example
+**/.npmrc
+
+# Supabase local runtime state
+supabase/.branches/
+supabase/.temp/
+
+# Editor, OS and agent-local state
+.agents/
+.codex/
+.vscode/
+**/.DS_Store
+**/.fleet/
+**/.idea/
+
+# Logs
+**/logs/
+**/*.log
