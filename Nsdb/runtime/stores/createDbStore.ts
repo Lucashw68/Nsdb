@@ -100,9 +100,8 @@ export function createDbStore<T extends Record<string, any>>(resource: string, o
 
 			hydrationValidation = (async () => {
 				try {
-					const { data, error: sessionError } = await supabase.auth.getSession()
-					const sessionUserId = sessionError ? null : data?.session?.user?.id ?? null
-					const resolvedUserId = supabaseUser.value?.id ?? sessionUserId
+					const { data, error: userError } = await supabase.auth.getUser()
+					const resolvedUserId = userError ? null : data?.user?.id ?? null
 
 					if (resolvedUserId && hydrated.ownerId === resolvedUserId) {
 						items.value = hydrated.items

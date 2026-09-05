@@ -8,7 +8,7 @@ Supabase Auth and RLS enforce access. NSDB table/column exposure, forms, schemas
 
 ### Store identity isolation
 
-`createDbStore` disables persistence by default, records `scopeOwnerId`, synchronously quarantines hydrated rows before rendering, and reveals them only after `getSession()` resolves to the same non-null owner. Unit and Chromium tests cover A -> anonymous/A/B and an initially unknown identity -> B; a mutation observer detects transient DOM disclosure.
+`createDbStore` disables persistence by default, records `scopeOwnerId`, synchronously quarantines hydrated rows before rendering, and reveals them only after `getUser()` authenticates the same non-null owner. Unit and Chromium tests cover A -> anonymous/A/B and an initially unknown identity -> B; a mutation observer detects transient DOM disclosure.
 
 Current contract:
 

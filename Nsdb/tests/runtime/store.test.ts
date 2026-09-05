@@ -79,10 +79,11 @@ describe('createDbStore', () => {
 		{ label: 'the same user', restoredUserId: 'user-a', shouldRestore: true },
 		{ label: 'another user', restoredUserId: 'user-b', shouldRestore: false },
 	])('quarantines persisted user A rows until session validation: $label', async ({ restoredUserId, shouldRestore }) => {
-		let resolveSession!: (value: any) => void
-		const session = new Promise(resolve => { resolveSession = resolve })
+		let resolveUser!: (value: any) => void
+		const validatedUser = new Promise(resolve => { resolveUser = resolve })
 		const mock = createSupabaseClientMock([])
-		mock.client.auth = { getSession: () => session }
+		const getSession = vi.fn()
+		mock.client.auth = { getUser: () => validatedUser, getSession }
 		setTestSupabaseClient(mock.client)
 		setTestSupabaseUser(null)
 		const store = createDbStore<Row>('persisted_playlists', { persist: true, scopeToUser: true })()
@@ -97,8 +98,8 @@ describe('createDbStore', () => {
 
 		expect(store.hydrationReady).toBe(false)
 		expect(store.items).toEqual([])
-		resolveSession({
-			data: { session: restoredUserId ? { user: { id: restoredUserId } } : null },
+		resolveUser({
+			data: { user: restoredUserId ? { id: restoredUserId } : null },
 			error: null,
 		})
 		await validation
@@ -106,6 +107,7 @@ describe('createDbStore', () => {
 		expect(store.hydrationReady).toBe(true)
 		expect(store.items).toEqual(shouldRestore ? [{ id: 'private-a', title: 'Private A' }] : [])
 		expect(store.scopeOwnerId).toBe(restoredUserId)
+		expect(getSession).not.toHaveBeenCalled()
 	})
 
 	it('rejects fetch errors and keeps reactive error state', async () => {
@@ -360,7 +362,7 @@ describe('createDbStore', () => {
 
 		setActivePinia(createPinia())
 		const clientMock = createSupabaseClientMock([])
-		clientMock.client.auth = { getSession: async () => ({ data: { session: { user: { id: 'user-a' } } }, error: null }) }
+		clientMock.client.auth = { getUser: async () => ({ data: { user: { id: 'user-a' } }, error: null }) }
 		setTestSupabaseClient(clientMock.client)
 		const clientStore = createDbStore<Row>('ssr_playlists', { persist: true, scopeToUser: true, staleTimeMs: 60_000 })()
 		clientStore.$patch({
