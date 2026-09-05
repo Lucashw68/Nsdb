@@ -32,6 +32,10 @@ supabase/.temp/
 **/.fleet/
 **/.idea/
 
+# Local agent instructions and internal working documents
+**/AGENTS.md
+/docs/
+
 # Logs
 **/logs/
 **/*.log

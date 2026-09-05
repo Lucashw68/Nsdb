@@ -23,7 +23,7 @@ Static output is written to `.output/public/` and is intentionally ignored by Gi
 
 ## Content structure
 
-User documentation lives in `content/`, grouped by numbered sections so Nuxt Content produces stable navigation order. Folder `.navigation.yml` files define section labels. Internal contributor documents under the repository root `docs/` are source material, not automatically published pages.
+User documentation lives in `content/`, grouped by numbered sections so Nuxt Content produces stable navigation order. Folder `.navigation.yml` files define section labels. Repository development and security guidance lives in the root `CONTRIBUTING.md` and `SECURITY.md` files.
 
 Application chrome and layouts live under `app/`. Reusable MDC helpers such as `Callout`, `Feature`, and `ApiBadge` live in `app/components/content/`; installation tabs use Nuxt UI's native code group.
 

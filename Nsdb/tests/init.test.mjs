@@ -56,7 +56,7 @@ test('buildNsdbConfigTemplate supports remote ssh type generation', () => {
 		schemaName: 'public',
 		remoteTypes: {
 			sshHost: "'vps'",
-			projectPath: "'/opt/supabase-projects/mysic'",
+			projectPath: "'/opt/supabase-projects/example'",
 			dbUrl: "'postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres'",
 			remoteOutput: "'/tmp/database.types.ts'",
 			beforeCommand: "'source ~/.nvm/nvm.sh'",
@@ -66,7 +66,7 @@ test('buildNsdbConfigTemplate supports remote ssh type generation', () => {
 
 	assert.match(template, /remoteTypes:/)
 	assert.match(template, /sshHost: 'vps'/)
-	assert.match(template, /projectPath: '\/opt\/supabase-projects\/mysic'/)
+	assert.match(template, /projectPath: '\/opt\/supabase-projects\/example'/)
 	assert.match(template, /dbUrl: 'postgresql:\/\/postgres:\$POSTGRES_PASSWORD@db:5432\/postgres'/)
 	assert.match(template, /beforeCommand: 'source ~\/.nvm\/nvm.sh'/)
 	assert.match(template, /supabaseCommand: 'npx supabase'/)

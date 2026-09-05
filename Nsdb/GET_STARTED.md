@@ -2,6 +2,8 @@
 
 Ce guide décrit l'installation complète de NSDB dans une app Nuxt 4 existante.
 
+> **Statut de publication :** ces commandes d'installation s'appliqueront après publication de la prochaine release candidate 1.0. La version du repository ne garantit pas la disponibilité du package sur npm.
+
 NSDB est un module Nuxt qui facilite l'utilisation de Supabase dans Nuxt avec :
 
 - génération des types Supabase
@@ -108,7 +110,7 @@ SUPABASE_PROJECT_ID=your-project-id
 SUPABASE_DB_URL=postgresql://postgres:password@localhost:5432/postgres
 # Self-hosted avec génération sur VPS :
 SUPABASE_REMOTE_SSH_HOST=vps
-SUPABASE_REMOTE_PROJECT_PATH=/opt/supabase-projects/mysic
+SUPABASE_REMOTE_PROJECT_PATH=/opt/supabase-projects/example
 SUPABASE_REMOTE_DB_URL=postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres
 ```
 
@@ -147,7 +149,7 @@ nsdb init --project-id your-project-id
 nsdb init --self-hosted
 nsdb init --db-url postgresql://postgres:password@localhost:5432/postgres
 nsdb init --remote-types
-nsdb init --remote-ssh-host vps --remote-project-path /opt/supabase-projects/mysic
+nsdb init --remote-ssh-host vps --remote-project-path /opt/supabase-projects/example
 nsdb init --force
 ```
 
@@ -184,7 +186,7 @@ ou avec les valeurs explicites :
 ```bash
 npx @lucashw68/nsdb init \
 	--remote-ssh-host vps \
-	--remote-project-path /opt/supabase-projects/mysic \
+	--remote-project-path /opt/supabase-projects/example \
 	--remote-db-url 'postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres'
 ```
 
@@ -292,7 +294,7 @@ export default {
 Ce mode exécute la génération sur le VPS, puis copie le fichier généré en local :
 
 ```bash
-ssh vps 'cd /opt/supabase-projects/mysic && npx supabase gen types typescript --db-url "postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres" > /tmp/database.types.ts'
+ssh vps 'cd /opt/supabase-projects/example && npx supabase gen types typescript --db-url "postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres" > /tmp/database.types.ts'
 scp vps:/tmp/database.types.ts ./types/database.types.ts
 ```
 

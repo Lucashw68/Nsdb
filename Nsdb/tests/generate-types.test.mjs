@@ -77,7 +77,7 @@ test('project id mode preserves the Supabase environment', () => {
 test('buildRemoteTypesCommands builds ssh and scp commands', () => {
 	const commands = buildRemoteTypesCommands({
 		sshHost: 'vps',
-		projectPath: '/opt/supabase-projects/mysic',
+		projectPath: '/opt/supabase-projects/example',
 		dbUrl: 'postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres',
 		remoteOutput: '/tmp/database.types.ts',
 		localOutputPath: 'src/types/database.types.ts',
@@ -86,7 +86,7 @@ test('buildRemoteTypesCommands builds ssh and scp commands', () => {
 
 	assert.equal(
 		commands.generateCommand,
-		'ssh \'vps\' \'cd \'\\\'\'/opt/supabase-projects/mysic\'\\\'\' && npx supabase gen types typescript --schema public --db-url "postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres" > "/tmp/database.types.ts"\''
+		'ssh \'vps\' \'cd \'\\\'\'/opt/supabase-projects/example\'\\\'\' && npx supabase gen types typescript --schema public --db-url "postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres" > "/tmp/database.types.ts"\''
 	)
 	assert.equal(
 		commands.copyCommand,
@@ -97,7 +97,7 @@ test('buildRemoteTypesCommands builds ssh and scp commands', () => {
 test('buildRemoteTypesCommands supports remote setup and custom supabase command', () => {
 	const commands = buildRemoteTypesCommands({
 		sshHost: 'vps',
-		projectPath: '/opt/supabase-projects/mysic',
+		projectPath: '/opt/supabase-projects/example',
 		dbUrl: 'postgresql://postgres:$POSTGRES_PASSWORD@db:5432/postgres',
 		remoteOutput: '/tmp/database.types.ts',
 		localOutputPath: 'types/database.types.ts',
