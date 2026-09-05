@@ -11,7 +11,7 @@ export type GearsUpdate = Omit<TablesUpdate<'gears'>, 'created_at' | 'id' | 'upd
 export type GearsRelationRows = {}
 
 export function useGears(opts: { store?: boolean } = {}) {
-	const model = useSupabaseModel<GearsRow, GearsInsert, GearsUpdate>(
+	const model = useSupabaseModel<GearsRow, GearsInsert, GearsUpdate, 'id'>(
 		'gears',
 		{ store: !!opts.store, storeCreator: (() => useGearStore() as any), primaryKey: 'id' }
 	)

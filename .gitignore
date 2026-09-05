@@ -8,6 +8,7 @@
 **/.nitro/
 **/.data/
 **/dist/
+website/dist
 **/coverage/
 **/test-results/
 **/playwright-report/

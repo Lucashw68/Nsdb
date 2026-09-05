@@ -10,14 +10,14 @@ export type __PASCAL__Update = Omit<TablesUpdate<'__TABLE__'>, __UPDATE_OMIT__>
 export type __PASCAL__RelationRows = __RELATION_ROWS__
 
 export function __HOOK__(opts: { store?: boolean } = {}) {
-	const model = useSupabaseModel<__ROW__, __PASCAL__Insert, __PASCAL__Update>(
+	const model = useSupabaseModel<__ROW__, __PASCAL__Insert, __PASCAL__Update, '__PRIMARY_KEY__'>(
 		'__TABLE__',
 		{ store: !!opts.store, storeCreator: __STORE_CREATOR__, primaryKey: '__PRIMARY_KEY__' }
 	)
 
-	const { 
-		fields, 
-		editableKeys, 
+	const {
+		fields,
+		editableKeys,
 		createDraftFromSchema,
 		bindModel,
 	} = useNsdbSchema(__PASCAL__Schema, __PASCAL__Relations);

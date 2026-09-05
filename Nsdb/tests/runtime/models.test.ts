@@ -56,6 +56,15 @@ describe('useSupabaseModel', () => {
 		await expect(model.remove('1')).rejects.toBe(failure)
 	})
 
+	it('rejects creation when Supabase does not return the persisted row', async () => {
+		const mock = createSupabaseClientMock([{ data: null, error: null }])
+		setTestSupabaseClient(mock.client)
+		const model = useSupabaseModel<Playlist, PlaylistInsert, PlaylistUpdate>('playlists')
+
+		await expect(model.create({ title: 'Missing response' }))
+			.rejects.toThrow('Cannot create "playlists": Supabase returned no row.')
+	})
+
 	it('delegates the same canonical API to an optional store', async () => {
 		const items = ref<Playlist[]>([{ id: '1', title: 'Cached' }])
 		const totalCount = ref<number | null>(1)
@@ -76,11 +85,86 @@ describe('useSupabaseModel', () => {
 
 		expect(await model.fetch()).toEqual(items.value)
 		expect(await model.getById('1')).toEqual({ id: '1', title: 'Cached' })
-		expect(await model.create({ title: 'New' })).toEqual({ id: '2', title: 'New' })
-		await model.update('1', { title: 'Updated' })
-		await model.remove('1')
+		const created = await model.create({ title: 'New' })
+		expect(created).toEqual({ id: '2', title: 'New' })
+		await model.update(created, { title: 'Updated' })
+		await model.remove(created)
+		expect(store.update).toHaveBeenCalledWith('2', { title: 'Updated' })
+		expect(store.remove).toHaveBeenCalledWith('2')
 		model.subscribe()
 		expect(store.subscribe).toHaveBeenCalledOnce()
+	})
+
+	it('extracts a custom primary key from fetched, created and related rows without sending the row as payload', async () => {
+		type Article = { slug: string; title: string; author?: { id: string; name: string } }
+		type ArticleInsert = { slug: string; title: string }
+		type ArticleUpdate = { title?: string }
+		const mock = createSupabaseClientMock([
+			{ data: [{ slug: 'fetched', title: 'Fetched', author: { id: 'a', name: 'Author' } }], count: 1, error: null },
+			{ data: { slug: 'found', title: 'Found' }, error: null },
+			{ data: { slug: 'created', title: 'Created' }, error: null },
+			{ data: [{ slug: 'created', title: 'Created updated' }], error: null },
+			{ data: [{ slug: 'fetched', title: 'Fetched updated' }], error: null },
+			{ data: [{ slug: 'found', title: 'Found updated' }], error: null },
+			{ data: null, error: null },
+		])
+		setTestSupabaseClient(mock.client)
+		const model = useSupabaseModel<Article, ArticleInsert, ArticleUpdate, 'slug'>('articles', {
+			primaryKey: 'slug',
+		})
+
+		const fetched = (await model.fetch({ select: '*, author(*)' }))[0]!
+		const found = await model.getById('found')
+		const created = await model.create({ slug: 'created', title: 'Created' })
+		await model.update(created, { title: 'Created updated' })
+		await model.update(fetched, { title: 'Fetched updated' })
+		await model.update(found!, { title: 'Found updated' })
+		await model.remove(fetched)
+
+		expect(mock.queries[3].calls).toContainEqual(['update', { title: 'Created updated' }])
+		expect(mock.queries[3].calls).toContainEqual(['eq', 'slug', 'created'])
+		expect(mock.queries[4].calls).toContainEqual(['update', { title: 'Fetched updated' }])
+		expect(mock.queries[4].calls).toContainEqual(['eq', 'slug', 'fetched'])
+		expect(mock.queries[5].calls).toContainEqual(['eq', 'slug', 'found'])
+		expect(mock.queries[6].calls).toContainEqual(['eq', 'slug', 'fetched'])
+	})
+
+	it('accepts falsy string and numeric primary keys from row targets', async () => {
+		const stringMock = createSupabaseClientMock([{ data: [{ slug: '', title: 'Empty slug updated' }], error: null }])
+		setTestSupabaseClient(stringMock.client)
+		const stringModel = useSupabaseModel<{ slug: string; title: string }, never, { title?: string }, 'slug'>('articles', {
+			primaryKey: 'slug',
+		})
+		await stringModel.update({ slug: '' }, { title: 'Empty slug updated' })
+		expect(stringMock.queries[0].calls).toContainEqual(['eq', 'slug', ''])
+
+		const numericMock = createSupabaseClientMock([
+			{ data: [{ sequence_id: 0, title: 'Zero updated' }], error: null },
+			{ data: null, error: null },
+		])
+		setTestSupabaseClient(numericMock.client)
+		const numericModel = useSupabaseModel<{ sequence_id: number; title: string }, never, { title?: string }, 'sequence_id'>('events', {
+			primaryKey: 'sequence_id',
+		})
+		const zero = { sequence_id: 0 }
+		await numericModel.update(zero, { title: 'Zero updated' })
+		await numericModel.remove(zero)
+		expect(numericMock.queries[0].calls).toContainEqual(['eq', 'sequence_id', 0])
+		expect(numericMock.queries[1].calls).toContainEqual(['eq', 'sequence_id', 0])
+	})
+
+	it('rejects row targets missing the generated primary key before contacting Supabase', async () => {
+		const mock = createSupabaseClientMock([])
+		setTestSupabaseClient(mock.client)
+		const model = useSupabaseModel<{ slug: string; title: string }, never, { title?: string }, 'slug'>('articles', {
+			primaryKey: 'slug',
+		})
+
+		await expect(model.update({ title: 'Draft' } as any, { title: 'Changed' }))
+			.rejects.toThrow('Cannot update "articles": target is missing primary key "slug".')
+		await expect(model.remove({ title: 'Draft' } as any))
+			.rejects.toThrow('Cannot remove "articles": target is missing primary key "slug".')
+		expect(mock.queries).toHaveLength(0)
 	})
 
 	it('requires a store creator when store mode is requested', () => {

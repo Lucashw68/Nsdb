@@ -27,17 +27,28 @@ export interface ModelQuery<
 	staleTimeMs?: number
 }
 
+/** A mutation may target either the generated primary-key value or a row of the same model. */
+export type ModelMutationTarget<
+	TRow,
+	TPrimaryKey extends Extract<keyof TRow, string>,
+> = Extract<TRow[TPrimaryKey], string | number> | TRow
+
 /** Stable public state and operations exposed by a table model. */
-export interface ModelHandle<TRow, TInsert, TUpdate> {
+export interface ModelHandle<
+	TRow,
+	TInsert,
+	TUpdate,
+	TPrimaryKey extends Extract<keyof TRow, string> = Extract<keyof TRow, string>,
+> {
 	items: Ref<TRow[]>
 	totalCount: Ref<number | null>
 	loading: Ref<boolean>
 	error: Ref<unknown>
 	stale: Ref<boolean>
 	getById(id: string | number, select?: string): Promise<TRow | null>
-	create(payload: TInsert): Promise<TRow | null>
-	update(id: string | number, payload: TUpdate): Promise<TRow | null>
-	remove(id: string | number): Promise<void>
+	create(payload: TInsert): Promise<TRow>
+	update(target: ModelMutationTarget<TRow, TPrimaryKey>, payload: TUpdate): Promise<TRow | null>
+	remove(target: ModelMutationTarget<TRow, TPrimaryKey>): Promise<void>
 	fetch(query?: ModelQuery<string, Extract<keyof TRow, string>>): Promise<TRow[]>
 	refresh(query?: ModelQuery<string, Extract<keyof TRow, string>>): Promise<TRow[]>
 	invalidate(): void

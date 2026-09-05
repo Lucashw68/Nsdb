@@ -29,14 +29,16 @@ const playlists = usePlaylists({ store: true })
 | `refresh(options?)` | `Promise<Row[]>`; always queries Supabase. |
 | `invalidate()` | `void`; keeps identity-safe rows and marks them stale. |
 | `getById(id, select?)` | `Promise<Row \| null>` by generated primary key. |
-| `create(insert)` | `Promise<Row \| null>` with the server-returned row. |
-| `update(id, update)` | `Promise<Row \| null>` with the server-returned row. |
-| `remove(id)` | `Promise<void>` after server confirmation. |
+| `create(insert)` | `Promise<Row>` with the server-returned row. |
+| `update(primaryKey, update)` / `update(row, update)` | `Promise<Row \| null>` with the server-returned row. |
+| `remove(primaryKey)` / `remove(row)` | `Promise<void>` after server confirmation. |
 | `subscribe()` | `void`; idempotently requests client-side Realtime. |
 | `unsubscribe()` | `void \| Promise<void>`; idempotently closes Realtime. |
 | `createDraft()` | Schema-derived draft for advanced form integrations. |
 
 Every async model operation rejects with the original Supabase/runtime error. `error` additionally exposes reactive failure state, without discarding Supabase `code`, `message`, `details`, or `hint`. Mutations update local state only after server success.
+
+When a row is passed to `update()` or `remove()`, NSDB extracts the generated primary-key metadata and uses the row only as the mutation target. Only the explicit update payload is sent to Supabase. The typed row-target overload requires a complete row from the same model; primitive primary-key values remain supported. Row-target mutations follow the existing generated CRUD support, so composite-primary-key CRUD remains unsupported.
 
 ## Query API
 

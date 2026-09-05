@@ -11,4 +11,4 @@ export type {
 	WherePrimitive,
 	WhereValue,
 } from './list'
-export type { ModelHandle, ModelQuery, ModelWhere } from './model'
+export type { ModelHandle, ModelMutationTarget, ModelQuery, ModelWhere } from './model'

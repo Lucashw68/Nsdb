@@ -153,13 +153,17 @@ async function createPlaylist() {
 
 async function renamePlaylist(id: string) {
 	await run(async () => {
-		await playlists.update(id, { title: 'Renamed playlist' })
+		const playlist = playlists.items.value.find(row => row.id === id)
+		if (!playlist) throw new Error(`Playlist "${id}" is not loaded.`)
+		await playlists.update(playlist, { title: 'Renamed playlist' })
 	})
 }
 
 async function deletePlaylist(id: string) {
 	await run(async () => {
-		await playlists.remove(id)
+		const playlist = playlists.items.value.find(row => row.id === id)
+		if (!playlist) throw new Error(`Playlist "${id}" is not loaded.`)
+		await playlists.remove(playlist)
 	})
 }
 

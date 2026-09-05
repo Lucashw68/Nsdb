@@ -5,6 +5,8 @@
 - freezes the generated model vocabulary around `fetch`, `refresh`,
   `invalidate`, `getById`, `create`, `update`, `remove`, `subscribe`, and
   `unsubscribe`;
+- accepts either a generated primary-key value or a complete model row as the
+  target of `update` and `remove`, without copying row fields into mutations;
 - removes the pre-1.0 aliases documented in the migration guide;
 - ships typed PostgreSQL metadata, column exposure and relation aliases;
 - stabilizes optional identity-scoped Pinia caching and opt-in Realtime;

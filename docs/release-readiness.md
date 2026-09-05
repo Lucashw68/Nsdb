@@ -93,7 +93,8 @@ typing or packaging defect.
 
 ## RC Validation — 1.0.0-rc.1
 
-Validation performed on 2026-09-03. No package was published.
+Validation replayed on 2026-09-05 after the additive row-target mutation API.
+No package was published.
 
 ### Artifact
 
@@ -104,9 +105,9 @@ Validation performed on 2026-09-03. No package was published.
 - preserved NSDB package-history parent: `e9ae7523b6fd1b0b70c3cfca42b4ea516169fbc1`;
 - package version: `1.0.0-rc.1`;
 - tarball: `lucashw68-nsdb-1.0.0-rc.1.tgz`;
-- SHA-256: `2f0857804e6378632b77d6f86ee2e92a5ade8b46f51885cbad3854cec972a44c`;
-- npm shasum: `03d895aff572ddd4c9145b04bca4035e2564d736`;
-- package size: 60,324 bytes compressed, 238,895 bytes unpacked, 48 files;
+- SHA-256: `30ce27a99bceef16bf3f74bdde781cf700673c29df5cebb6df85bf56beb4f1b1`;
+- npm shasum: `0812cc3b174e92e3e8bb8aba43a9318542105203`;
+- package size: 60,848 bytes compressed, 240,832 bytes unpacked, 48 files;
 - validation runtime: Node 22.21.0, npm 10.9.4, Yarn 1.22.22 and Supabase CLI 2.39.2.
 
 `npm pack --dry-run --json` and the installed artifact report the same metadata.
@@ -126,13 +127,14 @@ was retained outside the working tree while the topology was changed.
 | --- | --- |
 | Package typecheck | pass |
 | Node/generator tests | 11/11 files pass |
-| Runtime/model/store/component/type tests | 77/77 pass |
+| Runtime/model/store/component/type tests | 81/81 pass |
 | Fresh tarball consumers | minimal, relational/store and direct/Storage pass install, generation, typecheck and build |
 | Module fixtures | all component/store/prefix combinations pass; the deliberate auto-import collision fails with the expected actionable error |
 | Example typecheck | pass |
 | Example production build | pass after removing a stale `.output`; external font-provider requests were unavailable in the sandbox but did not fail the build |
 | PostgreSQL/Supabase integration | 6/6 pass: catalog introspection, relations, Auth/RLS, two-client Realtime and Storage |
 | Playwright Chromium | 3/3 pass: CRUD/Storage/identity, pre-hydration quarantine and generic component/RLS behavior |
+| Website | Nuxt typecheck and static generation pass with the row-target snippets |
 | Generation determinism | two byte-identical runs against the same allowlisted local schema |
 | Composite-key behavior | explicit generation failure, as documented; no incorrect model is emitted |
 | Package diff checks | `git diff --check` pass and `Nsdb/` worktree clean |
@@ -192,7 +194,14 @@ types or access package internals.
 
 ### API freeze
 
-The proposed frozen model contract remains unchanged:
+Before the final RC tag, the candidate received one additive, targeted model
+ergonomic extension: `update` and `remove` accept either the generated
+primary-key value or a complete row from the same model. Row targets are used
+only to extract the introspected primary key; update payloads remain explicit.
+The primitive forms are unchanged, and composite-primary-key CRUD remains
+outside the generated contract.
+
+The proposed frozen model contract is now:
 
 ```ts
 const model = useXxx({ store: true })
@@ -211,8 +220,8 @@ await model.getById(id, select?)
 model.createDraft()
 
 await model.create(data)
-await model.update(id, data)
-await model.remove(id)
+await model.update(idOrRow, data)
+await model.remove(idOrRow)
 
 model.subscribe()
 await model.unsubscribe()
@@ -229,10 +238,9 @@ field/cell/full-render slots, `refresh()` on the list ref, and the form's
 
 ### RC blockers
 
-None. The former root-provenance blocker is resolved: the package, Example,
-documentation, local Supabase definition and CI are present in the same clean
-root commit, and the full validation was replayed without changing tracked
-files.
+None. The row-target extension is included in the new root candidate commit and
+the tarball checksum below was verified from that exact source tree. The former
+root-topology blocker remains resolved.
 
 ### 1.0 blockers
 
@@ -255,10 +263,10 @@ blockers.
 
 ### Release recommendation
 
-**READY FOR RC TAG.** One root commit now identifies the complete validated
-release state, the rebuilt tarball and external consumers are green, Agorion is
-green with that exact artifact, and the frozen API required no change. No tag,
-push or package publication was performed by this validation.
+**READY FOR RC TAG.** The new root candidate contains the additive row-target
+API and website documentation; its rebuilt tarball, external consumers, local
+Supabase and browser suite are green. The previous candidate SHA must not be
+tagged. No tag, push or package publication was performed by this validation.
 
 After a manual RC publication, keep the contract feature-frozen, install the RC
 in pilot applications, accept only correctness/security/typing/packaging fixes,

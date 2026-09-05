@@ -172,6 +172,7 @@ test('generators map observable Supabase types, enums and relationships', async 
 	assert.match(model, /PlaylistsInsert/)
 	assert.match(model, /TablesUpdate/)
 	assert.match(model, /PlaylistsUpdate/)
+	assert.match(model, /useSupabaseModel<PlaylistsRow, PlaylistsInsert, PlaylistsUpdate, 'id'>/)
 	assert.match(model, /storeCreator: \(\(\) => usePlaylistStore\(\) as any\)/)
 	assert.match(registry, /case 'playlists'/)
 	const store = fs.readFileSync(path.join(root, 'stores/usePlaylistStore.ts'), 'utf8')

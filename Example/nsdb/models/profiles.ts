@@ -11,7 +11,7 @@ export type ProfilesUpdate = Omit<TablesUpdate<'profiles'>, 'created_at' | 'id'>
 export type ProfilesRelationRows = {}
 
 export function useProfiles(opts: { store?: boolean } = {}) {
-	const model = useSupabaseModel<ProfilesRow, ProfilesInsert, ProfilesUpdate>(
+	const model = useSupabaseModel<ProfilesRow, ProfilesInsert, ProfilesUpdate, 'id'>(
 		'profiles',
 		{ store: !!opts.store, storeCreator: (() => useProfileStore() as any), primaryKey: 'id' }
 	)

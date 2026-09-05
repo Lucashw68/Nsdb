@@ -26,10 +26,8 @@ const playlists = usePlaylists()
 await playlists.fetch()
 const playlist = await playlists.create({ title: 'Nouvelle playlist' })
 
-if (playlist) {
-	await playlists.update(playlist.id, { title: 'Renommée' })
-	await playlists.remove(playlist.id)
-}
+await playlists.update(playlist, { title: 'Renommée' })
+await playlists.remove(playlist)
 ```
 
 ```vue
@@ -57,6 +55,8 @@ await playlists.remove(id)
 playlists.subscribe()
 await playlists.unsubscribe()
 ```
+
+`update()` et `remove()` acceptent soit la valeur de clé primaire, soit une ligne du même modèle. Lorsque la ligne est déjà disponible, NSDB en extrait la clé primaire générée sans envoyer le reste de la ligne dans la mutation.
 
 `{ store: true }` active l'état partagé, le TTL et éventuellement la persistance. Sans store, chaque handle possède sa collection et contacte Supabase à chaque `fetch()`.
 

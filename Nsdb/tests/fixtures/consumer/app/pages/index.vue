@@ -49,7 +49,11 @@ void playlists.fetch({ search: 'x', searchColumns: ['unknown_column'] })
 void playlists.fetch({ force: true })
 
 async function exerciseIntrospectedTypes() {
-  await features.create({ slug: 'custom-key', required_field: 'required' })
+  const feature = await features.create({ slug: 'custom-key', required_field: 'required' })
+  await features.update(feature, { custom_default: 'changed from row', nullable_field: null })
+  await features.remove(feature)
+  // @ts-expect-error row targets must be complete rows, not insert-shaped drafts
+  await features.update({ slug: 'custom-key' }, { custom_default: 'changed from key pick' })
   await features.update('custom-key', { custom_default: 'changed', nullable_field: null })
   // @ts-expect-error identity columns are not insertable
   await features.create({ slug: 'bad', required_field: 'required', sequence_id: 1 })
@@ -57,6 +61,8 @@ async function exerciseIntrospectedTypes() {
   await features.update('custom-key', { computed_label: 'forbidden' })
   // @ts-expect-error the custom primary key is not updatable
   await features.update('custom-key', { slug: 'new-key' })
+  // @ts-expect-error a schema draft is not a persisted row target
+  await features.update(features.createDraft(), { custom_default: 'forbidden' })
 }
 
 void exerciseIntrospectedTypes
@@ -65,11 +71,14 @@ async function exerciseRelationTypes() {
 	const rows = await posts.fetch({ include: ['author', 'tags'] })
 	rows[0]?.author.name.toUpperCase()
 	rows[0]?.tags[0]?.name.toUpperCase()
+	if (rows[0]) await posts.update(rows[0], { title: 'Updated with embedded relations' })
 	const refreshed = await posts.refresh({ include: ['author'] })
 	refreshed[0]?.author.name.toUpperCase()
 	const authorRows = await authors.fetch({ include: ['posts', 'sender_messages', 'receiver_messages'] })
 	authorRows[0]?.posts[0]?.title.toUpperCase()
 	authorRows[0]?.sender_messages[0]?.body.toUpperCase()
+	// @ts-expect-error a row from another model is not a valid post target
+	if (authorRows[0]) await posts.update(authorRows[0], { title: 'Wrong target' })
 	const messageRows = await messages.fetch({ include: ['sender', 'receiver'] })
 	messageRows[0]?.sender.name.toUpperCase()
 	messageRows[0]?.receiver.name.toUpperCase()

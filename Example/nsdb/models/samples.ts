@@ -11,7 +11,7 @@ export type SamplesUpdate = Omit<TablesUpdate<'samples'>, 'created_at' | 'id'>
 export type SamplesRelationRows = {}
 
 export function useSamples(opts: { store?: boolean } = {}) {
-	const model = useSupabaseModel<SamplesRow, SamplesInsert, SamplesUpdate>(
+	const model = useSupabaseModel<SamplesRow, SamplesInsert, SamplesUpdate, 'id'>(
 		'samples',
 		{ store: !!opts.store, storeCreator: (() => useSampleStore() as any), primaryKey: 'id' }
 	)

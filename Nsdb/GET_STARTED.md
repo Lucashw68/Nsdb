@@ -468,11 +468,11 @@ const created = await playlists.create({
 	title: 'Ma playlist',
 })
 
-if (created?.id) {
-	await playlists.update(created.id, {
-		title: 'Titre modifie',
-	})
-}
+await playlists.update(created, {
+	title: 'Titre modifie',
+})
+
+await playlists.remove(created)
 </script>
 ```
 

@@ -11,8 +11,11 @@ const todos = useTodos()
 async function crud(id: string) {
   await todos.fetch()
   const created = await todos.create({ title: 'Ship NSDB' })
-  await todos.update(created?.id ?? id, { completed: true })
-  await todos.remove(created?.id ?? id)
+  await todos.update(created, { completed: true })
+  await todos.remove(created)
+
+  await todos.update(id, { completed: false })
+  await todos.remove(id)
 }
 
 void crud

@@ -11,7 +11,7 @@ export type SongsUpdate = Omit<TablesUpdate<'songs'>, 'created_at' | 'id'>
 export type SongsRelationRows = {}
 
 export function useSongs(opts: { store?: boolean } = {}) {
-	const model = useSupabaseModel<SongsRow, SongsInsert, SongsUpdate>(
+	const model = useSupabaseModel<SongsRow, SongsInsert, SongsUpdate, 'id'>(
 		'songs',
 		{ store: !!opts.store, storeCreator: (() => useSongStore() as any), primaryKey: 'id' }
 	)

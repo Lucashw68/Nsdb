@@ -1,0 +1,29 @@
+{
+  "name": "nsdb-docs",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "1.2.129",
+    "@iconify-json/vscode-icons": "1.2.76",
+    "@nuxt/content": "3.16.0",
+    "@nuxt/icon": "2.5.1",
+    "@nuxt/ui": "4.11.0",
+    "nuxt": "4.2.1"
+  },
+  "devDependencies": {
+    "better-sqlite3": "13.0.3",
+    "typescript": "^5.9.2",
+    "vue-tsc": "^3.0.6"
+  }
+}

@@ -11,7 +11,7 @@ export type ComponentRecordsUpdate = Omit<TablesUpdate<'component_records'>, 'id
 export type ComponentRecordsRelationRows = {}
 
 export function useComponentRecords(opts: { store?: boolean } = {}) {
-	const model = useSupabaseModel<ComponentRecordsRow, ComponentRecordsInsert, ComponentRecordsUpdate>(
+	const model = useSupabaseModel<ComponentRecordsRow, ComponentRecordsInsert, ComponentRecordsUpdate, 'id'>(
 		'component_records',
 		{ store: !!opts.store, storeCreator: (() => useComponentRecordStore() as any), primaryKey: 'id' }
 	)

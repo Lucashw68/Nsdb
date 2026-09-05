@@ -1,6 +1,6 @@
 import { useSupabaseApi } from './useSupabaseApi'
 import { useSupabaseClient, useSupabaseUser } from '#imports'
-import type { ModelHandle, ModelQuery } from '@lucashw68/nsdb/types/model'
+import type { ModelHandle, ModelMutationTarget, ModelQuery } from '@lucashw68/nsdb/types/model'
 import type { OrderDirection } from '@lucashw68/nsdb/types/list'
 import type { Ref } from 'vue'
 import { computed, isRef, ref, watch } from 'vue'
@@ -25,9 +25,9 @@ export interface StoreLike<T, TInsert = Partial<T>, TUpdate = Partial<T>> {
 	invalidate?: () => void
 }
 
-type Options<T, TInsert, TUpdate> =
+type Options<T, TInsert, TUpdate, TPrimaryKey extends Extract<keyof T, string>> =
 	| boolean
-	| { store?: boolean; storeCreator?: () => StoreLike<T, TInsert, TUpdate>; primaryKey?: string }
+	| { store?: boolean; storeCreator?: () => StoreLike<T, TInsert, TUpdate>; primaryKey?: TPrimaryKey }
 
 export type { ModelHandle, ModelQuery } from '@lucashw68/nsdb/types/model'
 
@@ -126,15 +126,29 @@ export function useSupabaseModel<
 	TRow,
 	TInsert = Partial<TRow>,
 	TUpdate = Partial<TRow>,
+	TPrimaryKey extends Extract<keyof TRow, string> = Extract<keyof TRow, string>,
 >(
 	modelName: string,
-	opts: Options<TRow, TInsert, TUpdate> = false
-): ModelHandle<TRow, TInsert, TUpdate> {
+	opts: Options<TRow, TInsert, TUpdate, TPrimaryKey> = false
+): ModelHandle<TRow, TInsert, TUpdate, TPrimaryKey> {
 	const useStore = typeof opts === 'boolean' ? opts : !!opts.store
 	const storeCreator =
 		typeof opts === 'object' && opts.store ? opts.storeCreator : undefined
 	const primaryKey = typeof opts === 'object' ? opts.primaryKey ?? 'id' : 'id'
 	type RowQuery = ModelQuery<string, Extract<keyof TRow, string>>
+	type MutationTarget = ModelMutationTarget<TRow, TPrimaryKey>
+
+	const resolveMutationTarget = (target: MutationTarget, operation: 'update' | 'remove'): string | number => {
+		const value = typeof target === 'object' && target !== null
+			? (target as Record<string, unknown>)[primaryKey]
+			: target
+
+		if (value === null || value === undefined) {
+			throw new Error(`Cannot ${operation} "${modelName}": target is missing primary key "${primaryKey}".`)
+		}
+
+		return value as string | number
+	}
 
 	// ############################################################
 	// # STORE MODE (Pinia / offline)
@@ -156,12 +170,18 @@ export function useSupabaseModel<
 
 		const getById = async (id: string | number) =>
 			(store.getById(id) as TRow | null) ?? null
-		const create = store.create as (payload: TInsert) => Promise<TRow | null>
-		const update = store.update as (
-			id: string | number,
-			payload: TUpdate
-		) => Promise<TRow | null>
-		const remove = store.remove as (id: string | number) => Promise<void>
+		const create = async (payload: TInsert): Promise<TRow> => {
+			const created = await store.create(payload)
+			if (created === null || created === undefined) {
+				throw new Error(`Cannot create "${modelName}": Supabase returned no row.`)
+			}
+			return created
+		}
+		const update = (target: MutationTarget, payload: TUpdate) =>
+			store.update(resolveMutationTarget(target, 'update'), payload)
+		const remove = async (target: MutationTarget) => {
+			await store.remove(resolveMutationTarget(target, 'remove'))
+		}
 		const fetch = async (query?: RowQuery) =>
 			(await store.fetchFromSupabase(query)) as TRow[]
 		const refresh = async (query?: RowQuery) => store.refresh
@@ -241,19 +261,21 @@ export function useSupabaseModel<
 		const response = await api.create<TRow>(modelName, payload as MutationPayload)
 		if (!response.success) throw response.error
 		const created = (response.data ?? null) as TRow | null
-		if (created) {
-			mutationSucceeded()
-			const activeQuery = normalizedCurrentQuery()
-			if (!isComplexCollectionQuery(activeQuery)) {
-				addOrUpdate(created)
-				typedItems.value = sortCollection(typedItems.value as Record<string, any>[], activeQuery).slice(0, activeQuery.limit ?? 100) as TRow[]
-				if (totalCount.value != null) totalCount.value++
-			}
+		if (created === null || created === undefined) {
+			throw new Error(`Cannot create "${modelName}": Supabase returned no row.`)
+		}
+		mutationSucceeded()
+		const activeQuery = normalizedCurrentQuery()
+		if (!isComplexCollectionQuery(activeQuery)) {
+			addOrUpdate(created)
+			typedItems.value = sortCollection(typedItems.value as Record<string, any>[], activeQuery).slice(0, activeQuery.limit ?? 100) as TRow[]
+			if (totalCount.value != null) totalCount.value++
 		}
 		return created
 	}
 
-	const update = async (id: string | number, payload: TUpdate) => {
+	const update = async (target: MutationTarget, payload: TUpdate) => {
+		const id = resolveMutationTarget(target, 'update')
 		const response = await api.update<TRow>(modelName, id, payload as MutationPayload, { key: primaryKey })
 		if (!response.success) throw response.error
 		const updated = (Array.isArray(response.data) ? response.data[0] : response.data) as TRow | null
@@ -268,7 +290,8 @@ export function useSupabaseModel<
 		return updated ?? null
 	}
 
-	const remove = async (id: string | number) => {
+	const remove = async (target: MutationTarget) => {
+		const id = resolveMutationTarget(target, 'remove')
 		const response = await api.remove(modelName, id, { key: primaryKey })
 		if (!response.success) throw response.error
 		const existed = typedItems.value.some(item => itemKey(item) === id)
