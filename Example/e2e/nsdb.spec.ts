@@ -118,12 +118,12 @@ test('Shared Store mutates Consumer B and updates Consumer A without Realtime', 
 	expect(noise).toEqual([])
 })
 
-test('Realtime distinguishes an external Supabase actor from the subscribed model', async ({ page }) => {
+test('Realtime distinguishes an external Supabase actor from the subscribed model', async ({ page }, testInfo) => {
 	const noise = collectBrowserNoise(page)
 	await page.goto('/realtime')
 	await useLocalIdentity(page, 'Alice')
 	await expect(page.getByText('Listening', { exact: true })).toBeVisible()
-	const title = `External event ${Date.now()}`
+	const title = `External event ${Date.now()}-${testInfo.repeatEachIndex}-${testInfo.workerIndex}`
 	await page.getByLabel('Row title').fill(title)
 	await page.locator('#realtime-external-insert').click()
 	await expect(page.locator('#realtime-rows')).toContainText(title)
