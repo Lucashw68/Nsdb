@@ -1,103 +1,79 @@
-<template>
-	<div class="p-8">
-		<span id="float-nav">
-			<NuxtLink to="/" class="text-purple-500">↩ Retour</NuxtLink>
-		</span>
-
-		<h1 class="mb-6 mt-4 text-4xl font-bold">NSDB, profils et RLS</h1>
-
-		<section class="mb-8 max-w-4xl space-y-4">
-			<p>
-				NSDB utilise le client Supabase courant de Nuxt. Les règles d'accès doivent rester dans Supabase avec les policies RLS.
-			</p>
-
-			<ul class="list-disc space-y-2 pl-6">
-				<li>Supabase Auth identifie l'utilisateur avec <code>auth.uid()</code>.</li>
-				<li>La table <code>profiles</code> utilise le même id que l'utilisateur auth.</li>
-				<li>Les tables métier référencent <code>profiles.id</code> ou directement <code>auth.users.id</code>.</li>
-				<li>Les triggers/defaults SQL remplissent automatiquement les colonnes d'appartenance.</li>
-				<li>Les RLS vérifient les droits en lecture, création, édition et suppression.</li>
-			</ul>
-		</section>
-
-		<section class="grid gap-6 lg:grid-cols-2">
-			<div class="rounded bg-gray-800 p-4">
-				<h2 class="mb-3 text-xl font-bold">Policy RLS</h2>
-				<pre class="overflow-auto whitespace-pre-wrap text-xs">{{ rlsPolicy }}</pre>
-			</div>
-
-			<div class="rounded bg-gray-800 p-4">
-				<h2 class="mb-3 text-xl font-bold">Trigger SQL</h2>
-				<pre class="overflow-auto whitespace-pre-wrap text-xs">{{ profileTrigger }}</pre>
-			</div>
-
-			<div class="rounded bg-gray-800 p-4">
-				<h2 class="mb-3 text-xl font-bold">Création côté Nuxt</h2>
-				<pre class="overflow-auto whitespace-pre-wrap text-xs">{{ createWithNsdb }}</pre>
-			</div>
-
-			<div class="rounded bg-gray-800 p-4">
-				<h2 class="mb-3 text-xl font-bold">Helper profil</h2>
-				<pre class="overflow-auto whitespace-pre-wrap text-xs">{{ profileHelper }}</pre>
-			</div>
-		</section>
-	</div>
-</template>
-
 <script setup lang="ts">
-const rlsPolicy = `create policy "Users can read own playlists"
-on playlists
-for select
-using (
-	profile_id in (
-		select id from profiles
-		where id = auth.uid()
-	)
-);`
+const config = useRuntimeConfig()
+const { user, busy: authBusy, error: authError, useLocalAccount } = usePlaygroundAuth()
+const playlists = usePlaylists({ store: true })
+const action = useDemoAction()
+const title = ref('')
+const busy = computed(() => authBusy.value || action.state.value === 'loading')
+const identityName = computed(() => user.value?.email?.startsWith('alice+') ? 'Alice' : user.value?.email?.startsWith('bob+') ? 'Bob' : user.value ? 'Signed-in user' : 'Anonymous')
 
-const profileTrigger = `create or replace function public.set_profile_id()
-returns trigger as $$
-begin
-	if new.profile_id is null then
-		new.profile_id := (select auth.uid());
-	end if;
+async function refresh() {
+	if (!user.value) { playlists.invalidate(); return }
+	action.loading(`Loading rows authorized for ${identityName.value}…`)
+	try {
+		await playlists.refresh({ orderBy: 'created_at', orderDirection: 'asc' })
+		action.success(`RLS returned ${playlists.items.value.length} row${playlists.items.value.length === 1 ? '' : 's'} for ${identityName.value}.`)
+	} catch (cause) { action.fail(cause, 'Authorized read failed') }
+}
 
-	return new;
-end;
-$$
-language plpgsql
-security definer
-set search_path = '';
+async function switchIdentity(name: 'alice' | 'bob') {
+	action.loading(`Signing in as ${name === 'alice' ? 'Alice' : 'Bob'}…`)
+	await useLocalAccount(name)
+	if (authError.value) { action.fail(new Error(authError.value), 'Sign-in failed'); return }
+	await refresh()
+}
 
-drop trigger if exists set_profile_id on public.playlists;
+async function create() {
+	if (!title.value.trim()) return
+	action.loading(`Creating a private row for ${identityName.value}…`)
+	try {
+		const row = await playlists.create({ title: title.value.trim() })
+		title.value = ''
+		action.success(`Created “${row.title}”. Only ${identityName.value} can read it.`)
+	} catch (cause) { action.fail(cause, 'Private create failed') }
+}
 
-create trigger set_profile_id
-before insert on public.playlists
-for each row
-execute function public.set_profile_id();`
+watch(() => user.value?.id, () => { void refresh() }, { immediate: true })
 
-const createWithNsdb = `const playlists = usePlaylists()
+const modelSnippet = `const playlists = usePlaylists({ store: true })
 
-await playlists.create({
-	title: 'Ma playlist',
-})`
-
-const profileHelper = `const { profile, profileId, ensureProfile } = useNsdbProfile({
-	table: 'profiles',
-	userColumn: 'id',
-	createIfMissing: true,
-	defaults: user => ({
-		id: user.id,
-		email: user.email,
-	}),
-})`
+await playlists.fetch()
+await playlists.create({ title: 'My private playlist' })`
+const policySnippet = `create policy "playlists_select_own"
+on public.playlists for select
+to authenticated
+using (auth.uid() = user_id);`
 </script>
 
-<style>
-#float-nav {
-	position: absolute;
-	top: 1rem;
-	left: 3rem;
-	font-size: 2rem;
-}
+<template>
+	<DemoShell title="🔐 Auth & RLS" description="Switch between the real seeded Alice and Bob accounts. Supabase RLS—not a frontend filter—changes which playlists the shared NSDB model can read." docs-path="/docs/supabase/rls" docs-label="Read the RLS guide">
+		<section class="identity-stage" aria-labelledby="active-identity-title">
+			<p class="stage-label">CURRENT IDENTITY</p><h2 id="active-identity-title">{{ user ? identityName : 'Not signed in' }}</h2><p>{{ user?.email ?? 'Choose a local account to begin.' }}</p>
+			<div v-if="config.public.playgroundEnvironment === 'local'" class="identity-switch"><button id="rls-alice" :class="{ active: identityName === 'Alice' }" :disabled="busy" @click="switchIdentity('alice')">1. Sign in as Alice</button><button id="rls-bob" :class="{ active: identityName === 'Bob' }" :disabled="busy" @click="switchIdentity('bob')">2. Switch to Bob</button></div>
+		</section>
+		<div class="responsibility-note"><span><strong>Supabase Auth</strong> establishes identity.</span><span><strong>RLS</strong> decides which rows are accessible.</span><span><strong>NSDB</strong> isolates shared client state by that identity.</span></div>
+		<section class="authorized-data" aria-labelledby="authorized-title">
+			<div><p class="stage-label">VISIBLE RESULT</p><h2 id="authorized-title">Rows Supabase allows {{ identityName }} to read</h2></div>
+			<form class="controls" @submit.prevent="create"><label class="field"><span>Private playlist title</span><input v-model="title" placeholder="Only this identity can see it" :disabled="!user || busy" /></label><button :disabled="!user || busy || !title.trim()">{{ action.state.value === 'loading' && action.label.value.includes('Creating') ? 'Creating…' : 'Create private row' }}</button><button type="button" :disabled="!user || busy" @click="refresh">Refresh authorized rows</button></form>
+			<ul id="ownership-rows" class="result-list"><li v-for="row in playlists.items.value" :key="row.id" class="result-row"><span>{{ row.title }}</span><small>visible to {{ identityName }}</small></li></ul>
+			<p v-if="user && action.state.value !== 'loading' && !playlists.items.value.length" class="muted">RLS returned no rows for this identity.</p>
+		</section>
+		<DemoStatus :state="action.state.value" :message="action.label.value" :error="action.error.value" />
+		<template #code><div class="demo-grid"><CodeSnippet title="Generated model" :code="modelSnippet" /><CodeSnippet title="Real Supabase policy" :code="policySnippet" /></div></template>
+	</DemoShell>
+</template>
+
+<style scoped>
+.identity-stage { padding: 1.2rem; border: 1px solid #047857; border-radius: .7rem; background: rgba(6, 95, 70, .14); }
+.identity-stage h2, .identity-stage p { margin: .2rem 0; }
+.stage-label { color: var(--accent); font-size: .72rem; font-weight: 700; letter-spacing: .12em; }
+.identity-switch { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1rem; }
+.identity-switch .active { border-color: #34d399; color: #6ee7b7; }
+.responsibility-note { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin: 1rem 0; }
+.responsibility-note span { padding: .7rem; border: 1px solid var(--border); border-radius: .55rem; color: var(--muted); font-size: .82rem; line-height: 1.4; }
+.responsibility-note strong { color: white; }
+.authorized-data { margin-top: 1.2rem; }
+.authorized-data h2 { margin: .2rem 0; font-size: 1.15rem; }
+.result-row small { color: #6ee7b7; }
+@media (max-width: 760px) { .responsibility-note { grid-template-columns: 1fr; } }
 </style>

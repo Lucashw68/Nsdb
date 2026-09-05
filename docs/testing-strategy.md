@@ -72,9 +72,9 @@ Storage policies repeat the same ownership scenarios for nested object paths.
 
 ## E2E and consumer build
 
-The Example app consumes public package exports only. `Nsdb/yarn test:consumer` packs NSDB, creates three temporary apps outside the repository (minimal CRUD, relational/store, direct/Storage), installs the `.tgz` with declared peers, verifies installed realpaths/version, runs generation, Nuxt typecheck/build, the module option matrix, collision behavior and negative exports.
+The Example playground consumes public package exports only and derives its nominal configuration from the versioned local Supabase stack. `Nsdb/yarn test:consumer` packs NSDB, creates three temporary apps outside the repository (minimal CRUD, relational/store, direct/Storage), installs the `.tgz` with declared peers, verifies installed realpaths/version, runs generation, Nuxt typecheck/build, the module option matrix, collision behavior and negative exports.
 
-Playwright starts the Example app against local Supabase and performs stable, uniquely named CRUD and Storage scenarios. Tests clean up only their own records/objects and remain rerunnable.
+Playwright starts the Example playground against local Supabase. It covers public navigation and demos plus stable, uniquely named CRUD, store, relation, Storage, component and identity-isolation scenarios. Tests clean up only their own records/objects and remain rerunnable.
 
 ## CI staging
 
@@ -94,5 +94,5 @@ Cache dependencies and Supabase images. Parallelize jobs after the package artif
 - `Nsdb/yarn test:consumer`: passes three real tarball installs, public-only imports, forbidden/removed import resolution, generated type assertions, typecheck, build, module matrix, collision handling and README `init` smoke. Typical isolated typechecks complete in about five seconds.
 - `Example/yarn typecheck` and `Example/yarn build`: pass against the linked package.
 - `Example/yarn test:integration`: passes six real local-Supabase scenarios, including two-client Realtime INSERT/UPDATE/DELETE and the observed cross-identity DELETE-key limitation, in addition to introspection, relation topology, Auth/RLS and Storage.
-- `Example/yarn test:e2e`: covers three Chromium scenarios, including store-backed Form -> List coherence, second-client realtime rendering, keyboard submit, real RLS/unique failures, persisted-state quarantine, rendered A-to-B isolation, and an assertion that the nominal journey emits no browser warning, error, page exception or hydration mismatch.
+- `Example/yarn test:e2e`: covers thirteen Chromium scenarios, including playground navigation, CRUD, store, Realtime, relations, Storage, store-backed Form -> List coherence, keyboard submit, real RLS/unique failures, persisted-state quarantine, rendered A-to-B isolation, responsive overflow, and assertions that nominal journeys emit no browser warning, error, page exception or hydration mismatch.
 - CI separates package quality, linked consumer, packed consumer and local-Supabase browser integration. Remaining depth gaps include automated axe scanning, Storage-backed form fields, many-to-many form mutation UI and composite-primary-key CRUD.

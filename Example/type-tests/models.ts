@@ -9,11 +9,11 @@ void playlists.unsubscribe()
 playlists.stale.value satisfies boolean
 
 void playlists.create({ title: 'Typed playlist' })
-void playlists.create({ title: 'Typed playlist', provider: 'spotify', thumbnail: null })
-void playlists.update('playlist-id', { title: 'Renamed playlist', provider: null })
+void playlists.create({ title: 'Typed playlist', status: 'published', description: null })
+void playlists.update('playlist-id', { title: 'Renamed playlist', status: 'draft' })
 
 // @ts-expect-error title is required by the Supabase Insert type.
-void playlists.create({ provider: 'spotify' })
+void playlists.create({ status: 'published' })
 
 // @ts-expect-error unknown columns must not compile.
 void playlists.create({ title: 'Typed playlist', unknown_column: true })
@@ -25,4 +25,4 @@ void playlists.create({ title: 'Typed playlist', id: 'client-controlled-id' })
 void playlists.update('playlist-id', { id: 'another-id' })
 
 // @ts-expect-error enum values come from Supabase.
-void playlists.update('playlist-id', { provider: 'invalid-provider' })
+void playlists.update('playlist-id', { status: 'invalid-status' })

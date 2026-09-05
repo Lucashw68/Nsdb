@@ -25,6 +25,7 @@ watch(() => route.fullPath, () => { mobileOpen.value = false })
         </UBadge>
         <DocsSearchButton />
         <UButton
+          v-if="config.public.githubUrl"
           :to="config.public.githubUrl"
           target="_blank"
           color="neutral"
@@ -48,7 +49,7 @@ watch(() => route.fullPath, () => { mobileOpen.value = false })
     <nav v-if="mobileOpen" id="mobile-navigation" class="mobile-nav" aria-label="Mobile navigation">
       <NuxtLink to="/docs/getting-started/introduction">Documentation</NuxtLink>
       <NuxtLink to="/docs/reference/public-api">API reference</NuxtLink>
-      <NuxtLink :to="config.public.githubUrl" target="_blank">GitHub</NuxtLink>
+      <NuxtLink v-if="config.public.githubUrl" :to="config.public.githubUrl" target="_blank">GitHub</NuxtLink>
     </nav>
   </header>
 </template>

@@ -2,7 +2,7 @@
 
 ## Current repository
 
-NSDB is not currently a package-manager workspace. It consists of the publishable source-module package in `Nsdb/`, the linked executable Nuxt 4 app in `Example/`, and an isolated consumer fixture installed from `npm pack` under `Nsdb/tests/fixtures/consumer/`.
+NSDB is not currently a package-manager workspace. It consists of the publishable source-module package in `Nsdb/`, the linked local-first Nuxt 4 playground in `Example/`, the public documentation in `website/`, and isolated consumer fixtures installed from `npm pack` under `Nsdb/tests/fixtures/`.
 
 ### Build-time and generation flow
 

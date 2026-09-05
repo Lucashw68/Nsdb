@@ -2,12 +2,8 @@
 export default defineNuxtConfig({
 	compatibilityDate: '2025-07-15',
 	devtools: { enabled: true },
-	debug: true,
+	debug: false,
 	modules: [
-		'@nuxt/fonts',
-		'@nuxt/icon',
-		'@nuxt/image',
-		'@nuxt/content',
 		'@lucashw68/nsdb',
 		'@pinia/nuxt',
 		'@nuxtjs/supabase',
@@ -18,7 +14,9 @@ export default defineNuxtConfig({
 	runtimeConfig: {
 		public: {
 			supabaseUrl: process.env.SUPABASE_URL,
-			supabaseKey: process.env.SUPABASE_KEY
+			supabaseKey: process.env.SUPABASE_KEY,
+			playgroundEnvironment: process.env.NSDB_PLAYGROUND_ENV || (/^http:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(process.env.SUPABASE_URL ?? '') ? 'local' : 'custom'),
+			docsUrl: process.env.NUXT_PUBLIC_NSDB_DOCS_URL || 'http://localhost:3001',
 		}
 	},
 
@@ -30,12 +28,14 @@ export default defineNuxtConfig({
 		redirectOptions: {
 			login: '/',
 			callback: '/confirm',
-			exclude: [
+				exclude: [
 				'/',
 				'/api',
 				'/crud',
 				'/store',
+				'/realtime',
 				'/components',
+				'/relations',
 				'/storage',
 				'/ownership',
 				'/e2e',
@@ -50,10 +50,16 @@ export default defineNuxtConfig({
 
 	piniaPluginPersistedstate: {
 		storage: 'localStorage',
-		debug: true
+		debug: false
 	},
 
 	build: {
 		transpile: ['@lucashw68/nsdb']
+	},
+
+	vite: {
+		resolve: {
+			dedupe: ['vue', 'vue-router', 'pinia'],
+		},
 	},
 })

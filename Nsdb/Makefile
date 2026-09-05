@@ -33,5 +33,5 @@ push:
 	git push origin main --follow-tags
 
 publish:
-	@echo "🚀 Publishing to GitHub Packages..."
-	$(NPM) publish
+	@echo "🚀 Publishing the prerelease to npm..."
+	$(NPM) publish --registry https://registry.npmjs.org/ --access public --tag next

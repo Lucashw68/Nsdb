@@ -1,7 +1,6 @@
 export default {
 	supabase: {
 		schema: 'public',
-		projectId: process.env.SUPABASE_PROJECT_ID,
 		linked: false,
 	},
 	paths: {
@@ -16,8 +15,28 @@ export default {
 		databaseTypes: '~~/types/database.types',
 	},
 	tables: {
+		include: [
+			'authors',
+			'categories',
+			'component_records',
+			'messages',
+			'playlists',
+			'posts',
+			'profiles',
+			'tags',
+			'tracks',
+		],
 		columns: {
 			component_records: {
+				user_id: { serverOnly: true },
+				created_at: { hidden: true },
+			},
+			playlists: {
+				user_id: { serverOnly: true },
+				created_at: { hidden: true },
+				updated_at: { hidden: true },
+			},
+			profiles: {
 				user_id: { serverOnly: true },
 				created_at: { hidden: true },
 			},

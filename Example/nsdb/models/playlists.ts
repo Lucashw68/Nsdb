@@ -5,10 +5,12 @@ import { PlaylistsRelations, PlaylistsSchema } from '~~/nsdb/schemas/playlists'
 import { useNsdbSchema } from '@lucashw68/nsdb/useNsdbSchema'
 import { usePlaylistStore } from '~~/stores/usePlaylistStore'
 
-export type PlaylistsRow = Omit<Tables<'playlists'>, never>
-export type PlaylistsInsert = Omit<TablesInsert<'playlists'>, 'created_at' | 'id' | 'updated_at'>
-export type PlaylistsUpdate = Omit<TablesUpdate<'playlists'>, 'created_at' | 'id' | 'updated_at'>
-export type PlaylistsRelationRows = {}
+export type PlaylistsRow = Omit<Tables<'playlists'>, 'user_id'>
+export type PlaylistsInsert = Omit<TablesInsert<'playlists'>, 'user_id'>
+export type PlaylistsUpdate = Omit<TablesUpdate<'playlists'>, 'id' | 'user_id'>
+export type PlaylistsRelationRows = {
+	'tracks': Omit<Tables<'tracks'>, never>[]
+}
 
 export function usePlaylists(opts: { store?: boolean } = {}) {
 	const model = useSupabaseModel<PlaylistsRow, PlaylistsInsert, PlaylistsUpdate, 'id'>(

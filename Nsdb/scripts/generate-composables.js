@@ -84,7 +84,8 @@ export async function main() {
 	const finalContent =
 		templateContent
 			.replace('// __IMPORTS__', importLines.join('\n'))
-			.replace('// __CASES__', caseLines.join('\n')) + '\n'
+			.replace('// __CASES__', caseLines.join('\n'))
+			.trimEnd() + '\n'
 
 	writeText(outputFilePath, markGenerated(finalContent))
 	console.log('✅ useNsdbModels:', path.relative(currentWorkingDirectory, outputFilePath))

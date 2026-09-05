@@ -1,5 +1,7 @@
 import nsdbPackage from '../Nsdb/package.json' with { type: 'json' }
 
+const baseURL = import.meta.env.NUXT_APP_BASE_URL || '/'
+
 export default defineNuxtConfig({
   compatibilityDate: '2026-09-01',
   modules: ['@nuxt/content', '@nuxt/ui', '@nuxt/icon'],
@@ -7,6 +9,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   devtools: { enabled: true },
   app: {
+    baseURL,
     head: {
       htmlAttrs: { lang: 'en' },
       meta: [
@@ -15,13 +18,13 @@ export default defineNuxtConfig({
         { property: 'og:title', content: 'NSDB — Nuxt Supabase Data Bridge' },
         { property: 'og:description', content: 'The typed data layer between Nuxt and Supabase.' },
       ],
-      link: [{ rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
+      link: [{ rel: 'icon', href: `${baseURL}favicon.svg`, type: 'image/svg+xml' }],
     },
   },
   runtimeConfig: {
     public: {
       nsdbVersion: nsdbPackage.version,
-      githubUrl: 'https://github.com/Lucashw68/nsdb',
+      githubUrl: import.meta.env.NUXT_PUBLIC_GITHUB_URL || '',
     },
   },
   icon: {

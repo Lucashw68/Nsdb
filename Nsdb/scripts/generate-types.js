@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'path'
 import { parseArgs } from '../helpers/args.js'
-import { ensureDir } from '../helpers/io.js'
+import { ensureDir, readText, writeText } from '../helpers/io.js'
 import { run, isAvailable } from '../helpers/shell.js'
 import { getBoolOption, getOption, loadNsdbConfig } from '../helpers/config.js'
 
@@ -88,6 +88,10 @@ async function loadDotenvIfAvailable(dotenvFilePath) {
 	}
 }
 
+function normalizeGeneratedTypes(filePath) {
+	writeText(filePath, `${readText(filePath).trimEnd()}\n`)
+}
+
 async function main() {
 	const parsedArguments = parseArgs()
 	const currentWorkingDirectory = process.cwd()
@@ -145,6 +149,7 @@ async function main() {
 		try {
 			run(generateCommand, { inherit: true })
 			run(copyCommand, { inherit: true })
+			normalizeGeneratedTypes(outputFilePath)
 			console.log('✅ Types generated and copied successfully.')
 		} catch (error) {
 			console.error('❌ Failed to generate Supabase types remotely.')
@@ -174,6 +179,7 @@ async function main() {
 			inherit: true,
 			env: buildLocalTypesEnvironment({ dbUrl }),
 		})
+		normalizeGeneratedTypes(outputFilePath)
 		console.log('✅ Types generated successfully.')
 	} catch (error) {
 		console.error('❌ Failed to generate Supabase types.')

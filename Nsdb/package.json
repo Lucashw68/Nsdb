@@ -17,14 +17,16 @@
 		"node": ">=22.14.0"
 	},
 	"publishConfig": {
-		"registry": "https://npm.pkg.github.com/"
+		"access": "public",
+		"registry": "https://registry.npmjs.org/",
+		"tag": "next"
 	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/Lucashw68/nsdb.git",
 		"directory": "Nsdb"
 	},
-	"homepage": "https://github.com/Lucashw68/nsdb#readme",
+	"homepage": "https://lucashw68.github.io/Nsdb/",
 	"bugs": {
 		"url": "https://github.com/Lucashw68/nsdb/issues"
 	},

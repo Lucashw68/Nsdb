@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 
 function credentials(label: string) {
@@ -16,6 +16,244 @@ async function authenticate(page, account: { email: string; password: string }) 
 	await expect(page.locator('#auth-state')).toContainText('authenticated:')
 	await expect(page.locator('#e2e-error')).toBeEmpty()
 }
+
+function collectBrowserNoise(page: Page) {
+	const browserNoise: string[] = []
+	page.on('console', message => {
+		if (message.type() === 'warning' || message.type() === 'error') browserNoise.push(`${message.type()}: ${message.text()}`)
+	})
+	page.on('pageerror', error => browserNoise.push(`pageerror: ${error.message}`))
+	return browserNoise
+}
+
+async function useLocalIdentity(page: Page, name: 'Alice' | 'Bob') {
+	await expect(page.locator('.playground-header')).toHaveAttribute('data-playground-ready', 'true')
+	await page.getByRole('button', { name: `Use ${name}` }).click()
+	await expect(page.locator('.playground-header .identity-context')).toContainText(name)
+}
+
+test('home, persistent identity and Auth/RLS explain Alice, Bob and anonymous state', async ({ page }) => {
+	const noise = collectBrowserNoise(page)
+
+	await page.goto('/')
+	await expect(page.getByRole('heading', { name: 'What do you want to see NSDB do?' })).toBeVisible()
+	await expect(page.getByText('Local Supabase', { exact: true })).toBeVisible()
+	await expect(page.locator('.identity-context')).toContainText('Not signed in')
+	await expect(page.getByRole('link', { name: /Shared Store/ })).toBeVisible()
+	await expect(page.getByRole('link', { name: /Realtime/ })).toBeVisible()
+	await useLocalIdentity(page, 'Alice')
+	await page.goto('/ownership')
+	await expect(page.getByRole('heading', { name: 'Alice', exact: true })).toBeVisible()
+	await expect(page.locator('#ownership-rows')).toContainText('Alice favourites')
+	await expect(page.locator('#ownership-rows')).not.toContainText('Bob favourites')
+	await page.locator('#rls-bob').click()
+	await expect(page.getByRole('heading', { name: 'Bob', exact: true })).toBeVisible()
+	await expect(page.locator('#ownership-rows')).toContainText('Bob favourites')
+	await expect(page.locator('#ownership-rows')).not.toContainText('Alice favourites')
+	await expect(page.getByText('Supabase Auth', { exact: false })).toBeVisible()
+	await expect(page.getByText('RLS', { exact: true })).toBeVisible()
+	await expect(page.getByText('NSDB', { exact: true }).last()).toBeVisible()
+	expect(noise).toEqual([])
+})
+
+test('Basic CRUD exposes create, selected row, explicit edit, feedback and delete', async ({ page }) => {
+	const noise = collectBrowserNoise(page)
+	await page.goto('/crud')
+	await useLocalIdentity(page, 'Alice')
+
+	const title = `Playground CRUD ${Date.now()}`
+	await page.getByLabel('New playlist title').fill(title)
+	await page.locator('#crud-create').click()
+	await expect(page.locator('#crud-rows')).toContainText(title)
+	const selectedRow = page.locator('#crud-rows li').filter({ hasText: title })
+	await expect(selectedRow).toHaveAttribute('data-selected', 'true')
+	const renamed = `${title} edited`
+	await page.getByLabel('New title').fill(renamed)
+	await page.locator('#crud-save').click()
+	await expect(page.getByRole('status')).toContainText(`Updated “${renamed}”`)
+	await expect(page.locator('#crud-rows')).toContainText(renamed)
+	await page.locator('#crud-delete').click()
+	await expect(page.getByRole('status')).toContainText(`Deleted “${renamed}”`)
+	await expect(page.locator('#crud-rows')).not.toContainText(renamed)
+	expect(noise).toEqual([])
+})
+
+test('Direct API runs a complete response-object CRUD cycle', async ({ page }) => {
+	const noise = collectBrowserNoise(page)
+	await page.goto('/api')
+	await useLocalIdentity(page, 'Alice')
+	const title = `Direct CRUD ${Date.now()}`
+	await page.getByLabel('New playlist title').fill(title)
+	await page.locator('#api-create').click()
+	await expect(page.locator('#api-result')).toContainText(`Create returned “${title}”`)
+	await expect(page.locator('#api-rows')).toContainText(title)
+	const renamed = `${title} edited`
+	await page.getByLabel('Edit selected title').fill(renamed)
+	await page.locator('#api-save').click()
+	await expect(page.locator('#api-result')).toContainText('Update returned')
+	await expect(page.locator('#api-rows')).toContainText(renamed)
+	await page.locator('#api-delete').click()
+	await expect(page.locator('#api-result')).toContainText(`Delete completed for “${renamed}”`)
+	await expect(page.locator('#api-rows')).not.toContainText(renamed)
+	expect(noise).toEqual([])
+})
+
+test('Shared Store mutates Consumer B and updates Consumer A without Realtime', async ({ page }) => {
+	const noise = collectBrowserNoise(page)
+
+	await page.goto('/store')
+	await useLocalIdentity(page, 'Alice')
+	await expect(page.getByText('no Realtime', { exact: true })).toBeVisible()
+	const title = `Shared state ${Date.now()}`
+	await page.getByLabel('New playlist title').fill(title)
+	await page.locator('#store-create').click()
+	await expect(page.locator('#consumer-a')).toContainText(title)
+	await expect(page.locator('#consumer-b')).toContainText(title)
+	await page.locator('#consumer-b li').filter({ hasText: title }).getByRole('button').click()
+	const renamed = `${title} updated`
+	await page.getByLabel('Update selected title').fill(renamed)
+	await page.locator('#store-save').click()
+	await expect(page.locator('#consumer-a')).toContainText(renamed)
+	await expect(page.getByRole('status')).toContainText('Consumer A already shows it')
+	expect(noise).toEqual([])
+})
+
+test('Realtime distinguishes an external Supabase actor from the subscribed model', async ({ page }) => {
+	const noise = collectBrowserNoise(page)
+	await page.goto('/realtime')
+	await useLocalIdentity(page, 'Alice')
+	await expect(page.getByText('Listening', { exact: true })).toBeVisible()
+	const title = `External event ${Date.now()}`
+	await page.getByLabel('Row title').fill(title)
+	await page.locator('#realtime-external-insert').click()
+	await expect(page.locator('#realtime-rows')).toContainText(title)
+	await expect(page.getByRole('heading', { name: 'External Supabase client' })).toBeVisible()
+	expect(noise).toEqual([])
+})
+
+test('Relations renders both the raw foreign key and resolved relation', async ({ page }) => {
+	const noise = collectBrowserNoise(page)
+
+	await page.goto('/relations')
+	await expect(page.getByText('Typed bridges')).toBeVisible()
+	await expect(page.getByText('foreign key', { exact: true })).toBeVisible()
+	await expect(page.getByText('Ada', { exact: true })).toBeVisible()
+	await expect(page.getByText('include: [\'author\'] →', { exact: true })).toBeVisible()
+
+	await page.setViewportSize({ width: 390, height: 844 })
+	await expect(page.locator('.entity-card')).toBeVisible()
+	expect(noise).toEqual([])
+})
+
+test('the public generic-components demo guides a complete create, edit, search and remove flow', async ({ page }) => {
+	const browserNoise = collectBrowserNoise(page)
+
+	await page.goto('/components')
+	await expect(page.getByRole('heading', { name: 'Choose a demo identity first' })).toBeVisible()
+	await expect(page.getByRole('button', { name: 'Create record' })).toHaveCount(0)
+	await expect(page.locator('.auth-gate')).toHaveAttribute('data-ready', 'true')
+
+	await page.getByRole('button', { name: 'Continue as Bob' }).click()
+	await expect(page.locator('[data-components-ready]')).toBeVisible()
+	await expect(page.getByText('bob+playground@example.test', { exact: true }).first()).toBeVisible()
+
+	const title = `Visible component demo ${Date.now()}`
+	const titleInput = page.getByLabel('Title', { exact: true })
+	await titleInput.focus()
+	await titleInput.fill(title)
+	await expect(titleInput).toHaveValue(title)
+	const inputColors = await titleInput.evaluate(element => {
+		const style = getComputedStyle(element)
+		return { color: style.color, background: style.backgroundColor, outline: style.outlineStyle }
+	})
+	expect(inputColors.color).not.toBe(inputColors.background)
+	expect(inputColors.color).toBe('rgb(249, 250, 251)')
+	expect(inputColors.background).toBe('rgb(3, 7, 18)')
+	expect(inputColors.outline).not.toBe('none')
+	await page.getByRole('button', { name: 'Create record' }).click()
+	await expect(page.getByRole('status')).toContainText('was created')
+	await expect(page.getByRole('button', { name: `Edit ${title}` })).toBeVisible()
+
+	await page.getByRole('button', { name: `Edit ${title}` }).click()
+	await expect(page.getByRole('heading', { name: title })).toBeVisible()
+	const renamed = `${title} renamed`
+	await page.getByLabel('Title', { exact: true }).fill(renamed)
+	await page.getByRole('button', { name: 'Save changes' }).click()
+	await expect(page.getByRole('status')).toContainText('was updated')
+	await expect(page.getByRole('button', { name: `Edit ${renamed}` })).toBeVisible()
+
+	await page.getByPlaceholder('Search your records').fill(renamed)
+	const row = page.getByRole('row').filter({ hasText: renamed })
+	await expect(row).toBeVisible()
+	await row.getByRole('button', { name: 'Supprimer la ligne' }).click()
+	await expect(page.getByRole('button', { name: `Edit ${renamed}` })).toHaveCount(0)
+	expect(browserNoise).toEqual([])
+})
+
+test('Storage shows selected metadata, upload success, file list and delete success', async ({ page }) => {
+	const noise = collectBrowserNoise(page)
+	await page.goto('/storage')
+	await useLocalIdentity(page, 'Alice')
+	const fileName = `playground-${Date.now()}.txt`
+	await page.getByLabel('File to upload').setInputFiles({ name: fileName, mimeType: 'text/plain', buffer: Buffer.from('NSDB playground') })
+	await expect(page.getByText(fileName, { exact: true })).toBeVisible()
+	await expect(page.getByText('text/plain', { exact: true })).toBeVisible()
+	await page.locator('#storage-upload').click()
+	await expect(page.getByRole('status')).toContainText(`Uploaded ${fileName} successfully`)
+	await expect(page.locator('#storage-files')).toContainText(fileName)
+	await page.getByRole('button', { name: `Delete ${fileName}` }).click()
+	await expect(page.getByRole('status')).toContainText(`Deleted ${fileName}`)
+	await expect(page.locator('#storage-files')).not.toContainText(fileName)
+	expect(noise).toEqual([])
+})
+
+test('public component and Storage failures remain visible with useful Supabase details', async ({ page }) => {
+	const errors: string[] = []
+	const pageErrors: string[] = []
+	page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+	page.on('pageerror', error => pageErrors.push(error.message))
+
+	await page.goto('/components')
+	await page.getByRole('button', { name: 'Continue as Alice' }).click()
+	await page.getByLabel('Title', { exact: true }).fill('Alice component row')
+	await page.getByRole('button', { name: 'Create record' }).click()
+	const componentError = page.locator('.form-card .demo-status[data-state="error"]')
+	await expect(componentError).toContainText('Form submission failed')
+	await expect(componentError).toContainText('duplicate key value')
+	await expect(componentError).toContainText('23505')
+
+	await page.goto('/storage')
+	await useLocalIdentity(page, 'Alice')
+	const fileName = `duplicate-${Date.now()}.txt`
+	await page.getByLabel('File to upload').setInputFiles({ name: fileName, mimeType: 'text/plain', buffer: Buffer.from('first') })
+	await page.locator('#storage-upload').click()
+	await expect(page.getByRole('status')).toContainText('Uploaded')
+	await page.locator('#storage-upload').click()
+	const storageError = page.locator('.upload-card .demo-status[data-state="error"]')
+	await expect(storageError).toContainText('Upload failed')
+	await expect(storageError).toContainText(/already exists|duplicate/i)
+	await page.getByRole('button', { name: `Delete ${fileName}` }).click()
+
+	expect(pageErrors).toEqual([])
+	expect(errors.length).toBeGreaterThanOrEqual(2)
+	const unexpectedErrors = errors.filter(message => !/23505|duplicate|already exists|CREATE component_records|storage:UPLOAD|Failed to load resource.*(?:400|409)/i.test(message))
+	expect(unexpectedErrors, `Unexpected console errors:\n${unexpectedErrors.join('\n')}`).toEqual([])
+})
+
+test('all public scenarios remain usable without page overflow on desktop and mobile', async ({ page }) => {
+	const noise = collectBrowserNoise(page)
+	const routes = ['/', '/crud', '/api', '/store', '/realtime', '/components', '/relations', '/ownership', '/storage']
+	for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+		await page.setViewportSize(viewport)
+		for (const route of routes) {
+			await page.goto(route)
+			await expect(page.locator('#nsdb-playground-page')).toBeVisible()
+			const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+			expect(overflow, `${route} overflows at ${viewport.width}px`).toBeLessThanOrEqual(1)
+		}
+	}
+	expect(noise).toEqual([])
+})
 
 test('Nuxt -> generated model/store -> Supabase CRUD, search, Storage and identity isolation', async ({ page }) => {
 	const browserNoise: string[] = []

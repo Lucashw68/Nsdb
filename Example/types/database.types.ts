@@ -9,6 +9,47 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      authors: {
+        Row: {
+          id: string
+          name: string
+        }
+        Insert: {
+          id?: string
+          name: string
+        }
+        Update: {
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          id: string
+          name: string
+          parent_id: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          parent_id?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          parent_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       component_records: {
         Row: {
           created_at: string
@@ -51,46 +92,112 @@ export type Database = {
         }
         Relationships: []
       }
-      gears: {
+      composite_children: {
         Row: {
-          color: string | null
-          created_at: string
-          device_id: string | null
           id: string
-          image: string | null
-          manufacturer: string
-          name: string
-          profile_id: string
-          updated_at: string | null
+          parent_code: string
+          tenant_id: string
         }
         Insert: {
-          color?: string | null
-          created_at?: string
-          device_id?: string | null
           id?: string
-          image?: string | null
-          manufacturer: string
-          name: string
-          profile_id: string
-          updated_at?: string | null
+          parent_code: string
+          tenant_id: string
         }
         Update: {
-          color?: string | null
-          created_at?: string
-          device_id?: string | null
           id?: string
-          image?: string | null
-          manufacturer?: string
-          name?: string
-          profile_id?: string
-          updated_at?: string | null
+          parent_code?: string
+          tenant_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "gears_profile_id_fkey"
-            columns: ["profile_id"]
+            foreignKeyName: "composite_children_tenant_id_parent_code_fkey"
+            columns: ["tenant_id", "parent_code"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "composite_parents"
+            referencedColumns: ["tenant_id", "code"]
+          },
+        ]
+      }
+      composite_parents: {
+        Row: {
+          code: string
+          label: string
+          tenant_id: string
+        }
+        Insert: {
+          code: string
+          label: string
+          tenant_id: string
+        }
+        Update: {
+          code?: string
+          label?: string
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          body: string
+          id: string
+          receiver_id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          id?: string
+          receiver_id: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          id?: string
+          receiver_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "authors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "authors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playlist_links: {
+        Row: {
+          child_id: string
+          parent_id: string
+        }
+        Insert: {
+          child_id: string
+          parent_id: string
+        }
+        Update: {
+          child_id?: string
+          parent_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playlist_links_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "playlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playlist_links_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "playlists"
             referencedColumns: ["id"]
           },
         ]
@@ -98,307 +205,216 @@ export type Database = {
       playlists: {
         Row: {
           created_at: string
+          description: string | null
           id: string
-          item_count: number | null
-          profile_id: string
-          provider: Database["public"]["Enums"]["PROVIDERS"] | null
-          provider_id: string | null
-          thumbnail: string | null
+          metadata: Json
+          status: Database["public"]["Enums"]["playlist_status"]
+          tags: string[]
           title: string
-          updated_at: string | null
+          updated_at: string
+          user_id: string
         }
         Insert: {
           created_at?: string
+          description?: string | null
           id?: string
-          item_count?: number | null
-          profile_id?: string
-          provider?: Database["public"]["Enums"]["PROVIDERS"] | null
-          provider_id?: string | null
-          thumbnail?: string | null
+          metadata?: Json
+          status?: Database["public"]["Enums"]["playlist_status"]
+          tags?: string[]
           title: string
-          updated_at?: string | null
+          updated_at?: string
+          user_id: string
         }
         Update: {
           created_at?: string
+          description?: string | null
           id?: string
-          item_count?: number | null
-          profile_id?: string
-          provider?: Database["public"]["Enums"]["PROVIDERS"] | null
-          provider_id?: string | null
-          thumbnail?: string | null
+          metadata?: Json
+          status?: Database["public"]["Enums"]["playlist_status"]
+          tags?: string[]
           title?: string
-          updated_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      post_tags: {
+        Row: {
+          post_id: string
+          tag_id: string
+        }
+        Insert: {
+          post_id: string
+          tag_id: string
+        }
+        Update: {
+          post_id?: string
+          tag_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "playlists_profile_id_fkey"
-            columns: ["profile_id"]
+            foreignKeyName: "post_tags_post_id_fkey"
+            columns: ["post_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          author_id: string
+          id: string
+          title: string
+        }
+        Insert: {
+          author_id: string
+          id?: string
+          title: string
+        }
+        Update: {
+          author_id?: string
+          id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "authors"
             referencedColumns: ["id"]
           },
         ]
       }
       profiles: {
         Row: {
-          avatar: string | null
-          bio: string | null
           created_at: string
-          first_name: string | null
-          full_name: string | null
+          display_name: string
           id: string
-          last_name: string | null
-          onboard: boolean
-          public: boolean | null
-          soundcloud: string | null
-          spotify: string | null
-          username: string | null
-          youtube: string
+          user_id: string
         }
         Insert: {
-          avatar?: string | null
-          bio?: string | null
           created_at?: string
-          first_name?: string | null
-          full_name?: string | null
+          display_name: string
           id?: string
-          last_name?: string | null
-          onboard?: boolean
-          public?: boolean | null
-          soundcloud?: string | null
-          spotify?: string | null
-          username?: string | null
-          youtube?: string
+          user_id: string
         }
         Update: {
-          avatar?: string | null
-          bio?: string | null
           created_at?: string
-          first_name?: string | null
-          full_name?: string | null
+          display_name?: string
           id?: string
-          last_name?: string | null
-          onboard?: boolean
-          public?: boolean | null
-          soundcloud?: string | null
-          spotify?: string | null
-          username?: string | null
-          youtube?: string
+          user_id?: string
         }
         Relationships: []
       }
-      provider_credentials: {
+      schema_features: {
         Row: {
-          access_token_encrypted: string
-          created_at: string
-          expires_at: string | null
-          id: string
-          profile_id: string
-          provider: string
-          provider_user_id: string | null
-          refresh_token_encrypted: string | null
-          scopes: string[]
-          updated_at: string | null
+          computed_label: string | null
+          created_on: string
+          custom_default: string
+          labels: string[]
+          nullable_field: string | null
+          payload: Json
+          required_field: string
+          sequence_by_default: number
+          sequence_id: number
+          slug: string
+          state: Database["public"]["Enums"]["playlist_status"]
+          uuid_default: string
         }
         Insert: {
-          access_token_encrypted: string
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          profile_id: string
-          provider: string
-          provider_user_id?: string | null
-          refresh_token_encrypted?: string | null
-          scopes?: string[]
-          updated_at?: string | null
+          computed_label?: string | null
+          created_on?: string
+          custom_default?: string
+          labels?: string[]
+          nullable_field?: string | null
+          payload?: Json
+          required_field: string
+          sequence_by_default?: number
+          sequence_id?: never
+          slug: string
+          state?: Database["public"]["Enums"]["playlist_status"]
+          uuid_default?: string
         }
         Update: {
-          access_token_encrypted?: string
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          profile_id?: string
-          provider?: string
-          provider_user_id?: string | null
-          refresh_token_encrypted?: string | null
-          scopes?: string[]
-          updated_at?: string | null
+          computed_label?: string | null
+          created_on?: string
+          custom_default?: string
+          labels?: string[]
+          nullable_field?: string | null
+          payload?: Json
+          required_field?: string
+          sequence_by_default?: number
+          sequence_id?: never
+          slug?: string
+          state?: Database["public"]["Enums"]["playlist_status"]
+          uuid_default?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "provider_credentials_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      samples: {
+      tags: {
         Row: {
-          bpm: number | null
-          created_at: string
           id: string
-          key: string | null
-          name: string | null
-          profile_id: string | null
-          storage_path: string | null
-          type: string | null
+          name: string
         }
         Insert: {
-          bpm?: number | null
-          created_at?: string
           id?: string
-          key?: string | null
-          name?: string | null
-          profile_id?: string | null
-          storage_path?: string | null
-          type?: string | null
+          name: string
         }
         Update: {
-          bpm?: number | null
-          created_at?: string
           id?: string
-          key?: string | null
-          name?: string | null
-          profile_id?: string | null
-          storage_path?: string | null
-          type?: string | null
+          name?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "samples_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      songs: {
+      tracks: {
         Row: {
-          artist_name: string | null
-          bucket_path: string | null
-          clean_title: string | null
-          content_type: string | null
           created_at: string
-          genres: string[] | null
           id: string
-          metadata_confidence: number | null
-          metadata_status: string | null
-          owner: string
           playlist_id: string
-          profile_id: string
-          provider: Database["public"]["Enums"]["PROVIDERS"]
-          provider_id: string | null
-          resource_id: string
-          thumbnail: string
+          position: number
           title: string
         }
         Insert: {
-          artist_name?: string | null
-          bucket_path?: string | null
-          clean_title?: string | null
-          content_type?: string | null
           created_at?: string
-          genres?: string[] | null
           id?: string
-          metadata_confidence?: number | null
-          metadata_status?: string | null
-          owner: string
           playlist_id: string
-          profile_id: string
-          provider: Database["public"]["Enums"]["PROVIDERS"]
-          provider_id?: string | null
-          resource_id: string
-          thumbnail: string
+          position: number
           title: string
         }
         Update: {
-          artist_name?: string | null
-          bucket_path?: string | null
-          clean_title?: string | null
-          content_type?: string | null
           created_at?: string
-          genres?: string[] | null
           id?: string
-          metadata_confidence?: number | null
-          metadata_status?: string | null
-          owner?: string
           playlist_id?: string
-          profile_id?: string
-          provider?: Database["public"]["Enums"]["PROVIDERS"]
-          provider_id?: string | null
-          resource_id?: string
-          thumbnail?: string
+          position?: number
           title?: string
         }
         Relationships: [
           {
-            foreignKeyName: "playlistItems_playlist_id_fkey"
+            foreignKeyName: "tracks_playlist_id_fkey"
             columns: ["playlist_id"]
             isOneToOne: false
             referencedRelation: "playlists"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "songs_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
       }
     }
     Views: {
-      provider_connections: {
-        Row: {
-          created_at: string | null
-          expires_at: string | null
-          id: string | null
-          profile_id: string | null
-          provider: string | null
-          provider_user_id: string | null
-          scopes: string[] | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          expires_at?: string | null
-          id?: string | null
-          profile_id?: string | null
-          provider?: string | null
-          provider_user_id?: string | null
-          scopes?: string[] | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          expires_at?: string | null
-          id?: string | null
-          profile_id?: string | null
-          provider?: string | null
-          provider_user_id?: string | null
-          scopes?: string[] | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "provider_credentials_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       [_ in never]: never
     }
     Enums: {
-      PROVIDERS: "mysic" | "youtube" | "soundcloud" | "spotify"
       playlist_status: "draft" | "published"
     }
     CompositeTypes: {
@@ -527,7 +543,6 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      PROVIDERS: ["mysic", "youtube", "soundcloud", "spotify"],
       playlist_status: ["draft", "published"],
     },
   },

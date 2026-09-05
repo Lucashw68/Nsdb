@@ -98,6 +98,8 @@ jobs:
         working-directory: Nsdb
       - run: yarn playwright install --with-deps chromium
       - run: yarn supabase:start
+      - name: Verify local playground generation is deterministic
+        run: yarn nsdb:local && git diff --exit-code
       - run: yarn test:integration
       - run: yarn test:e2e
       - name: Upload Playwright traces

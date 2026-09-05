@@ -807,7 +807,16 @@ function rowKey(row: Record<string, any>) {
 											@click="handleDelete(row)"
 											:class="classes.deleteButton"
 										>
-											<Icon name="mdi:trash" class="w-4 h-4 text-red-500" />
+											<svg
+												aria-hidden="true"
+												class="w-4 h-4 text-red-500"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+											>
+												<path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5" />
+											</svg>
 										</button>
 									</td>
 								</tr>
@@ -940,8 +949,6 @@ function rowKey(row: Record<string, any>) {
 </template>
 
 <style scoped>
-@reference "tailwindcss";
-
 .nsdb-table {
 	width: 100% !important;
 	max-width: 100%;

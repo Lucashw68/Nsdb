@@ -1,75 +1,76 @@
-# Nuxt Minimal Starter
+# NSDB Playground
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+`Example/` is the interactive playground for NSDB. It demonstrates real CRUD,
+shared stores, Realtime, generic components, relations, Auth/RLS and Storage.
+The complete documentation lives in [`website/`](../website/README.md).
 
-## Setup
+Each page is a short interactive scenario backed by local Supabase. Shared
+Store and Realtime are separate demonstrations so the source of each update is
+always visible.
 
-Make sure to install dependencies:
+The reference environment is the disposable Supabase stack at the repository
+root. No personal project, VPS, account or bucket is required.
+
+## Requirements
+
+- Node 22.14 or newer;
+- Yarn 1.22;
+- Docker-compatible container runtime for Supabase CLI.
+
+## Start from a clone
 
 ```bash
-# npm
-npm install
-
-# pnpm
-pnpm install
-
-# yarn
+cd Example
 yarn install
-
-# bun
-bun install
+yarn supabase:start
+yarn nsdb:local
+yarn dev:local
 ```
 
-## Development Server
+Open <http://127.0.0.1:3000>. The `dev:local` and `nsdb:local` commands read the
+local URL, anonymous key and database URL from `supabase status`; they never
+fall back to a remote project.
 
-Start the development server on `http://localhost:3000`:
+Use the **Alice** and **Bob** buttons in the playground header. These local-only
+development accounts and their sample rows come from the deterministic seed and
+make the RLS boundary visible immediately.
+
+## Reset the demo
+
+Stop the development server, then run:
 
 ```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
+yarn supabase:reset
 ```
 
-## Production
+This reapplies the versioned migrations and deterministic seed to the local
+stack only. The playground contains no browser-side database reset action.
 
-Build the application for production:
+When finished:
 
 ```bash
-# npm
-npm run build
+yarn supabase:stop
+```
 
-# pnpm
-pnpm build
+## Optional custom Supabase
 
-# yarn
+Copy `.env.example` and set `SUPABASE_URL` and `SUPABASE_KEY`, then use
+`yarn dev`. This mode is explicit: local helper commands always use the local
+CLI stack, and missing custom configuration never falls back to a personal
+project. The custom project must provide the same public schema, RLS policies
+and `nsdb-private` bucket as the versioned local migrations.
+
+Set `NUXT_PUBLIC_NSDB_DOCS_URL` when the documentation website is not running
+at <http://localhost:3001>.
+
+## Validation
+
+```bash
+yarn typecheck
 yarn build
-
-# bun
-bun run build
+yarn test:integration
+yarn test:e2e
 ```
 
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+Playwright derives its credentials from the local Supabase CLI and exercises
+the public NSDB APIs through Chromium.

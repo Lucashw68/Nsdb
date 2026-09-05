@@ -150,11 +150,10 @@ Les règles `serverOnly`, `hidden` et `editable` réduisent la surface client ; 
 
 ## Documentation
 
-- [API publique canonique](https://github.com/Lucashw68/nsdb/blob/main/docs/public-api.md)
-- [Migration vers l'API stable](https://github.com/Lucashw68/nsdb/blob/main/docs/migration-to-stable-api.md)
-- [Architecture](https://github.com/Lucashw68/nsdb/blob/main/docs/architecture.md)
-- [Contrat cache et Realtime](https://github.com/Lucashw68/nsdb/blob/main/docs/data-freshness-audit.md)
-- [Sécurité](https://github.com/Lucashw68/nsdb/blob/main/docs/security.md)
-- [État de préparation RC](https://github.com/Lucashw68/nsdb/blob/main/docs/release-readiness.md)
+- [Documentation NSDB](https://lucashw68.github.io/Nsdb/)
+- [API publique canonique](https://lucashw68.github.io/Nsdb/docs/reference/public-api)
+- [Migration vers l'API stable](https://lucashw68.github.io/Nsdb/docs/migration/migrating-to-1)
+- [Contrat cache et Realtime](https://lucashw68.github.io/Nsdb/docs/core/cache-and-freshness)
+- [Sécurité et RLS](https://lucashw68.github.io/Nsdb/docs/supabase/authentication)
 
-NSDB est proposé en `1.0.0-rc.1`. Aucun package n'est publié automatiquement depuis ce repository ; consultez le guide de migration avant d'adopter la RC.
+NSDB `1.0.0-rc.1` est une Release Candidate publiée sous le dist-tag npm `next`. Consultez le guide de migration avant de l'adopter.

@@ -1,6 +1,6 @@
 # NSDB Contributor Guide
 
-This file is the reference for agents and contributors working on this repository. The repository contains `Nsdb/`, the published Nuxt module and CLI package; `Example/`, the executable linked Nuxt application; and `Nsdb/tests/fixtures/consumer/`, the isolated app installed from the real package tarball.
+This file is the reference for agents and contributors working on this repository. The repository contains `Nsdb/`, the published Nuxt module and CLI package; `Example/`, the local-first interactive playground; `website/`, the public documentation; and `Nsdb/tests/fixtures/consumer/`, the isolated app installed from the real package tarball.
 
 ## Vision
 
@@ -37,7 +37,8 @@ Do not trade away the first four for marginal optimization or a more abstract de
 - `Nsdb/types/`: public configuration and runtime contracts.
 - `Nsdb/tests/`: package tests. New test levels may use subdirectories and fixtures.
 - `Nsdb/tests/fixtures/consumer/`: external-package contract fixture; it must know NSDB only through the installed `.tgz`.
-- `Example/`: real Nuxt consumer and executable documentation. It must only use APIs available to an external consumer.
+- `Example/`: local-first Nuxt playground and browser-integration app. It demonstrates public APIs with short contextual snippets; exhaustive teaching belongs in `website/`.
+- `website/`: official public documentation and API guides.
 - `docs/`: contributor architecture, roadmap, API audit, security, and testing strategy.
 
 There is currently no root package manager workspace. Run package commands from `Nsdb/` or `Example/` unless a root orchestrator is deliberately added.

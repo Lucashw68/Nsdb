@@ -5,9 +5,9 @@ import { ProfilesRelations, ProfilesSchema } from '~~/nsdb/schemas/profiles'
 import { useNsdbSchema } from '@lucashw68/nsdb/useNsdbSchema'
 import { useProfileStore } from '~~/stores/useProfileStore'
 
-export type ProfilesRow = Omit<Tables<'profiles'>, never>
-export type ProfilesInsert = Omit<TablesInsert<'profiles'>, 'created_at' | 'id'>
-export type ProfilesUpdate = Omit<TablesUpdate<'profiles'>, 'created_at' | 'id'>
+export type ProfilesRow = Omit<Tables<'profiles'>, 'user_id'>
+export type ProfilesInsert = Omit<TablesInsert<'profiles'>, 'user_id'>
+export type ProfilesUpdate = Omit<TablesUpdate<'profiles'>, 'id' | 'user_id'>
 export type ProfilesRelationRows = {}
 
 export function useProfiles(opts: { store?: boolean } = {}) {
