@@ -10,7 +10,7 @@ Do not use vulnerability reports for ordinary support questions or feature reque
 
 ## Supported code
 
-`1.0.0-rc.2` is the current release candidate and has not yet been published. Security fixes target the current development branch and the most recent published package version, if one exists. Older pre-release versions may require upgrading rather than receiving a backport.
+Security fixes target the current development branch and the most recent stable package version. Pre-release versions may require upgrading rather than receiving a backport.
 
 ## Security boundaries
 

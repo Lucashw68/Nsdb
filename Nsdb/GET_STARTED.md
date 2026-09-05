@@ -2,8 +2,6 @@
 
 Ce guide décrit l'installation complète de NSDB dans une app Nuxt 4 existante.
 
-> **Statut de publication :** `1.0.0-rc.2` est la release candidate actuelle et n'est pas encore disponible sur npm. Ces commandes d'installation s'appliqueront après publication.
-
 NSDB est un module Nuxt qui facilite l'utilisation de Supabase dans Nuxt avec :
 
 - génération des types Supabase

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.0 — stable
+
+- generates typed table models, schemas, composables, stores, enums, and
+  database metadata from Supabase;
+- provides the stable model API: `fetch`, `refresh`, `invalidate`, `getById`,
+  `createDraft`, `create`, `update`, `remove`, `subscribe`, and `unsubscribe`;
+- supports independent direct handles and explicit shared Pinia-backed state
+  with bounded cache freshness and optional identity-scoped persistence;
+- supports typed relation aliases through `include` and opt-in Realtime
+  subscriptions;
+- accepts either a primary-key value or a complete generated Row as the target
+  of `update` and `remove`;
+- includes metadata-driven `NsdbList` and `NsdbForm` components;
+- keeps `useSupabaseApi` and `useSupabaseApiStorage` available for lower-level
+  Database and Storage operations;
+- integrates with Supabase Auth while keeping PostgreSQL RLS and Storage
+  policies as the authorization boundaries;
+- ships the `nsdb` CLI for deterministic initialization, generation, and safe
+  cleanup of generated files.
+
 ## 1.0.0-rc.2 — release candidate
 
 - adds the MIT license to the public repository and npm package;
@@ -10,7 +30,8 @@
 - retains the runtime, generated-model, and component contract validated for
   the first 1.0 release candidate.
 
-This candidate has not been published to npm.
+This candidate was published to npm under the `next` dist-tag and validated
+through fresh registry consumers before the stable release.
 
 ## 1.0.0-rc.1 — release candidate
 

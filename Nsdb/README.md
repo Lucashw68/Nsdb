@@ -2,11 +2,9 @@
 
 NSDB transforme les types d'une base Supabase en modèles Nuxt typés, stores Pinia optionnels et composants CRUD génériques. Supabase reste la source de vérité pour les données, Auth et RLS.
 
-> **Statut de publication :** `1.0.0-rc.2` est la release candidate actuelle. Elle n'a pas encore été publiée sur npm. Les commandes d'installation ci-dessous s'appliqueront après publication.
-
 ## Quick start
 
-Prérequis validés pour la RC : Node 22.14+, Nuxt 4.2.1+, Vue 3.5.24+, `@nuxtjs/supabase` 1.6.1 ou 2.x, `@pinia/nuxt` 0.11.2+, Pinia 3.0.3+, un projet Supabase et ses policies RLS. Le CLI Supabase est requis pour générer les types ; une URL PostgreSQL directe est recommandée pour les métadonnées exactes.
+Prérequis validés pour NSDB 1.0 : Node 22.14+, Nuxt 4.2.1+, Vue 3.5.24+, `@nuxtjs/supabase` 1.6.1 ou 2.x, `@pinia/nuxt` 0.11.2+, Pinia 3.0.3+, un projet Supabase et ses policies RLS. Le CLI Supabase est requis pour générer les types ; une URL PostgreSQL directe est recommandée pour les métadonnées exactes.
 
 ```bash
 npm install @lucashw68/nsdb @nuxtjs/supabase @pinia/nuxt pinia
@@ -152,7 +150,11 @@ Les règles `serverOnly`, `hidden` et `editable` réduisent la surface client ; 
 
 ## Documentation
 
-La documentation publique officielle est maintenue dans le dossier [`website/`](https://github.com/Lucashw68/nsdb/tree/main/website) du repository. Consultez notamment les guides d'API publique, de migration, de cache/Realtime et de sécurité/RLS avant d'adopter la prochaine release candidate.
+La documentation publique officielle est disponible sur le [site NSDB](https://lucashw68.github.io/Nsdb/) et maintenue dans le dossier [`website/`](https://github.com/Lucashw68/nsdb/tree/main/website) du repository. Consultez notamment les guides d'API publique, de migration, de cache/Realtime et de sécurité/RLS.
+
+### Agents de code
+
+Le guide [Using NSDB with coding agents](https://lucashw68.github.io/Nsdb/docs/advanced/coding-agents) fournit une section courte à intégrer aux instructions du projet consommateur. NSDB 1.0 ne crée et ne modifie aucun `AGENTS.md` automatiquement.
 
 ## Licence
 
