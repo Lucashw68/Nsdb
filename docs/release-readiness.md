@@ -93,21 +93,24 @@ typing or packaging defect.
 
 ## RC Validation — 1.0.0-rc.1
 
-Validation replayed on 2026-09-05 after the additive row-target mutation API.
-No package was published.
+Validation replayed on 2026-09-05 after the additive row-target mutation API
+and the local-first playground hardening. No package was published at the time
+of this pre-release record.
 
 ### Artifact
 
-- root candidate: the commit containing this validation record (resolve it with
-  `git rev-parse HEAD`; the immutable SHA is also recorded in the release
-  report before tagging);
+- validated code candidate before this metadata-only record:
+  `05e0a2803ebaf13ceb514ab5272a96ffc4a3102c`;
+- final release provenance: the target of the immutable annotated
+  `v1.0.0-rc.1` tag; this avoids embedding a self-referential commit identifier
+  in the commit whose contents determine that identifier;
 - root-topology integration commit: `f223e7b74427e37ec813a3bb2d40aec71ae32f08`;
 - preserved NSDB package-history parent: `e9ae7523b6fd1b0b70c3cfca42b4ea516169fbc1`;
 - package version: `1.0.0-rc.1`;
 - tarball: `lucashw68-nsdb-1.0.0-rc.1.tgz`;
-- SHA-256: `30ce27a99bceef16bf3f74bdde781cf700673c29df5cebb6df85bf56beb4f1b1`;
-- npm shasum: `0812cc3b174e92e3e8bb8aba43a9318542105203`;
-- package size: 60,848 bytes compressed, 240,832 bytes unpacked, 48 files;
+- SHA-256: `9468f70597e67c432bfc68e114fa8ed5ca072b5b4fc363c780e3e38ae70b5c88`;
+- npm shasum: `55a9102d0e31cf7d9338bdbf4698d1be57ff7f62`;
+- package size: 60,964 bytes compressed, 241,058 bytes unpacked, 48 files;
 - validation runtime: Node 22.21.0, npm 10.9.4, Yarn 1.22.22 and Supabase CLI 2.39.2.
 
 `npm pack --dry-run --json` and the installed artifact report the same metadata.
@@ -133,8 +136,8 @@ was retained outside the working tree while the topology was changed.
 | Example typecheck | pass |
 | Example production build | pass after removing a stale `.output`; external font-provider requests were unavailable in the sandbox but did not fail the build |
 | PostgreSQL/Supabase integration | 6/6 pass: catalog introspection, relations, Auth/RLS, two-client Realtime and Storage |
-| Playwright Chromium | 3/3 pass: CRUD/Storage/identity, pre-hydration quarantine and generic component/RLS behavior |
-| Website | Nuxt typecheck and static generation pass with the row-target snippets |
+| Playwright Chromium | 13/13 public playground scenarios pass; the Realtime scenario additionally passes 3/3 concurrent repetitions |
+| Website | Nuxt typecheck and static generation pass with 60 prerendered routes and the GitHub Pages project base path |
 | Generation determinism | two byte-identical runs against the same allowlisted local schema |
 | Composite-key behavior | explicit generation failure, as documented; no incorrect model is emitted |
 | Package diff checks | `git diff --check` pass and `Nsdb/` worktree clean |
@@ -191,6 +194,15 @@ types or access package internals.
    version-7 `./decode` export. Declaring `entities` 7 in Example removes the
    runtime 500 and the browser suite passes. This is an Example dependency-tree
    correction, not a package API change.
+5. Store hydration validated persisted ownership through `getSession()`, which
+   can trust unverified session storage during SSR. It now uses `getUser()` and
+   exposes no persisted rows until Supabase has authenticated the restored
+   identity; the store contract test and browser quarantine scenario protect it.
+6. The playground announced Realtime readiness after an arbitrary delay, so an
+   external insert could race the channel join. It now enables the external
+   actor only after the actual Supabase channel reaches `joined`; repeated test
+   data also includes Playwright's repeat/worker indices to avoid false unique
+   constraint conflicts between concurrent repetitions.
 
 ### API freeze
 
@@ -263,10 +275,13 @@ blockers.
 
 ### Release recommendation
 
-**READY FOR RC TAG.** The new root candidate contains the additive row-target
-API and website documentation; its rebuilt tarball, external consumers, local
-Supabase and browser suite are green. The previous candidate SHA must not be
-tagged. No tag, push or package publication was performed by this validation.
+**READY FOR RC TAG.** The root candidate contains the additive row-target API,
+the authenticated persistence check, the local-first playground and website
+deployment configuration. Its byte-stable tarball, three external consumers,
+local Supabase, 13-scenario browser suite, repeated Realtime scenario and an
+isolated Agorion install are green. The previous candidate SHA must not be
+tagged. No tag, push or package publication had been performed when this record
+was committed.
 
 After a manual RC publication, keep the contract feature-frozen, install the RC
 in pilot applications, accept only correctness/security/typing/packaging fixes,
