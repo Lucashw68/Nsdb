@@ -4,7 +4,7 @@
 
 NSDB is a typed data layer for Nuxt and Supabase. It generates the repetitive client-side CRUD layer from database types and PostgreSQL metadata while keeping Supabase responsible for data, Auth, Row Level Security (RLS), and Storage.
 
-NSDB is currently preparing its next 1.0 release candidate. The repository package version does not indicate that a matching package is available on npm.
+`1.0.0-rc.2` is the current release candidate. It has not been published to npm.
 
 ## Why NSDB?
 
@@ -49,7 +49,7 @@ There is no root package-manager workspace. Run package commands from the releva
 
 ## Getting started
 
-The complete installation, configuration, generation, and API guides live in [`website/content/`](./website/content/). Until the next release candidate is published, use the repository playground to evaluate the current code instead of assuming npm availability.
+The complete installation, configuration, generation, and API guides live in [`website/content/`](./website/content/). Until `1.0.0-rc.2` is published, use the repository playground to evaluate the current code instead of assuming npm availability.
 
 Repository development requires Node.js 22.14 or newer. The package and playground use Yarn 1.22; the documentation site uses npm. Local integration and browser tests also require a Docker-compatible container runtime for the Supabase CLI.
 
@@ -107,4 +107,4 @@ Do not place service-role keys, registry tokens, or production credentials in br
 
 ## License
 
-`Nsdb/package.json` currently declares MIT, but this repository does not yet contain a `LICENSE` file. A license file and maintainer confirmation are required before the repository is considered ready for public use.
+NSDB is available under the [MIT License](./LICENSE).

@@ -1,6 +1,6 @@
 {
 	"name": "@lucashw68/nsdb",
-	"version": "1.0.0-rc.1",
+	"version": "1.0.0-rc.2",
 	"type": "module",
 	"description": "A typed Nuxt 4 bridge for Supabase models, optional Pinia caching and generic CRUD components.",
 	"license": "MIT",

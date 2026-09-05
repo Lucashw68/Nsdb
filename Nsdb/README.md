@@ -2,7 +2,7 @@
 
 NSDB transforme les types d'une base Supabase en modèles Nuxt typés, stores Pinia optionnels et composants CRUD génériques. Supabase reste la source de vérité pour les données, Auth et RLS.
 
-> **Statut de publication :** NSDB prépare sa prochaine release candidate 1.0. La version du repository ne garantit pas qu'un package correspondant soit disponible sur npm. Les commandes d'installation ci-dessous s'appliqueront après publication.
+> **Statut de publication :** `1.0.0-rc.2` est la release candidate actuelle. Elle n'a pas encore été publiée sur npm. Les commandes d'installation ci-dessous s'appliqueront après publication.
 
 ## Quick start
 
@@ -153,3 +153,7 @@ Les règles `serverOnly`, `hidden` et `editable` réduisent la surface client ; 
 ## Documentation
 
 La documentation publique officielle est maintenue dans le dossier [`website/`](https://github.com/Lucashw68/nsdb/tree/main/website) du repository. Consultez notamment les guides d'API publique, de migration, de cache/Realtime et de sécurité/RLS avant d'adopter la prochaine release candidate.
+
+## Licence
+
+NSDB est distribué sous [licence MIT](./LICENSE).

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.0-rc.2 — release candidate
+
+- adds the MIT license to the public repository and npm package;
+- removes internal development documents and adds public repository,
+  contribution, and security entry points;
+- installs NSDB dependencies before the linked playground in CI so Nuxt can
+  load the module during `Example` postinstall;
+- retains the runtime, generated-model, and component contract validated for
+  the first 1.0 release candidate.
+
+This candidate has not been published to npm.
+
 ## 1.0.0-rc.1 — release candidate
 
 - freezes the generated model vocabulary around `fetch`, `refresh`,
@@ -19,4 +31,4 @@
 - validates the source package through three independent Nuxt tarball
   consumers, local Supabase/Auth/RLS/Storage/Realtime and Chromium.
 
-No package has been published by this repository change.
+The `v1.0.0-rc.1` tag exists, but this version was never published to npm.

@@ -57,9 +57,11 @@ jobs:
           cache-dependency-path: |
             Nsdb/yarn.lock
             Example/yarn.lock
-      - run: yarn install --frozen-lockfile
-      - run: yarn install --frozen-lockfile --force
+      - name: Install NSDB dependencies
+        run: yarn install --frozen-lockfile
         working-directory: Nsdb
+      - name: Install playground dependencies
+        run: yarn install --frozen-lockfile
       - run: yarn typecheck
       - run: yarn build
 
@@ -93,9 +95,11 @@ jobs:
           cache-dependency-path: |
             Nsdb/yarn.lock
             Example/yarn.lock
-      - run: yarn install --frozen-lockfile
-      - run: yarn install --frozen-lockfile --force
+      - name: Install NSDB dependencies
+        run: yarn install --frozen-lockfile
         working-directory: Nsdb
+      - name: Install playground dependencies
+        run: yarn install --frozen-lockfile
       - run: yarn playwright install --with-deps chromium
       - run: yarn supabase:start
       - name: Verify local playground generation is deterministic
