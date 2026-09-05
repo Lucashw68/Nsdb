@@ -13,4 +13,3 @@ const href = computed(() => `${String(config.public.docsUrl).replace(/\/$/, '')}
 		{{ label ?? 'Read the full documentation' }} →
 	</a>
 </template>
-

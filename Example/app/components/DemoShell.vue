@@ -26,4 +26,3 @@ defineProps<{
 		</section>
 	</main>
 </template>
-

@@ -11,4 +11,3 @@ defineProps<{
 		<pre><code>{{ code }}</code></pre>
 	</section>
 </template>
-
