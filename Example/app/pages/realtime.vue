@@ -23,10 +23,16 @@ async function startListening() {
 	connecting.value = true
 	action.loading('Connecting the Realtime subscription…')
 	try {
+		const existingChannels = new Set(supabase.getChannels())
 		subscribedModel.subscribe()
-		// The public subscribe() contract is intentionally void. Keep the external
-		// actor disabled while the local WebSocket completes its initial handshake.
-		await new Promise(resolve => setTimeout(resolve, 750))
+		const deadline = Date.now() + 10_000
+		while (Date.now() < deadline) {
+			const channel = supabase.getChannels().find(candidate => !existingChannels.has(candidate))
+			if (channel?.state === 'joined') break
+			await new Promise(resolve => setTimeout(resolve, 50))
+		}
+		const channel = supabase.getChannels().find(candidate => !existingChannels.has(candidate))
+		if (channel?.state !== 'joined') throw new Error('Realtime subscription did not become ready.')
 		listening.value = true
 		action.success('Listening for database changes.')
 	} catch (cause) { action.fail(cause, 'Subscription failed') }
